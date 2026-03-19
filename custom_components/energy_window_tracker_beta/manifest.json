@@ -1,0 +1,17 @@
+{
+  "domain": "energy_window_tracker_beta",
+  "name": "Energy Window Tracker (Beta)",
+  "version": "2.3.38",
+  "documentation": "https://github.com/thedeviousdev/ha-energy-window-tracker",
+  "issue_tracker": "https://github.com/thedeviousdev/ha-energy-window-tracker/issues",
+  "codeowners": [],
+  "requirements": [],
+  "dependencies": [],
+  "iot_class": "local_polling",
+  "config_flow": true,
+  "loggers": [
+    "custom_components.energy_window_tracker_beta",
+    "custom_components.energy_window_tracker_beta.config_flow",
+    "custom_components.energy_window_tracker_beta.sensor"
+  ]
+}

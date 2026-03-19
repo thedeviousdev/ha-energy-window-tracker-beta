@@ -1,0 +1,263 @@
+{
+  "title": "Energy Window Tracker (Beta)",
+  "config": {
+    "step": {
+      "user": {
+        "title": "Select sensor",
+        "description": "Select an energy source that resets daily (e.g. today's import)",
+        "data": {
+          "source_entity": "Sensor"
+        },
+        "data_description": {
+          "source_entity": "Cumulative kWh sensor that resets daily (e.g. sensor.today_load)."
+        }
+      },
+      "windows": {
+        "title": "Add window",
+        "description": "Name the window and define the start and end times. You can add, edit and delete windows later via the \"configure\" menu.",
+        "data": {
+          "source_name": "Friendly name",
+          "window_name": "Window name",
+          "cost_per_kwh": "Cost per kWh ($)",
+          "start_time": "Start time",
+          "end_time": "End time",
+          "start": "1 - Start time",
+          "end": "1 - End time",
+          "start_1": "2 - Start time",
+          "end_1": "2 - End time",
+          "start_2": "3 - Start time",
+          "end_2": "3 - End time",
+          "start_3": "4 - Start time",
+          "end_3": "4 - End time",
+          "start_4": "5 - Start time",
+          "end_4": "5 - End time",
+          "start_5": "6 - Start time",
+          "end_5": "6 - End time",
+          "start_6": "7 - Start time",
+          "end_6": "7 - End time",
+          "start_7": "8 - Start time",
+          "end_7": "8 - End time",
+          "start_8": "9 - Start time",
+          "end_8": "9 - End time",
+          "start_9": "10 - Start time",
+          "end_9": "10 - End time",
+          "add_another": "Add another time range"
+        }
+      },
+      "add_window": {
+        "title": "Add new window",
+        "description": "Name the window and define the start and end times.",
+        "data": {
+          "window_name": "Window name",
+          "cost_per_kwh": "Cost per kWh ($)",
+          "start_time": "Start time",
+          "end_time": "End time",
+          "start": "1 - Start time",
+          "end": "1 - End time",
+          "start_1": "2 - Start time",
+          "end_1": "2 - End time",
+          "start_2": "3 - Start time",
+          "end_2": "3 - End time",
+          "start_3": "4 - Start time",
+          "end_3": "4 - End time",
+          "start_4": "5 - Start time",
+          "end_4": "5 - End time",
+          "start_5": "6 - Start time",
+          "end_5": "6 - End time",
+          "start_6": "7 - Start time",
+          "end_6": "7 - End time",
+          "start_7": "8 - Start time",
+          "end_7": "8 - End time",
+          "start_8": "9 - Start time",
+          "end_8": "9 - End time",
+          "start_9": "10 - Start time",
+          "end_9": "10 - End time",
+          "add_another": "Add another time range"
+        }
+      },
+      "edit_window": {
+        "title": "Edit window",
+        "data": {
+          "window_name": "Window name",
+          "cost_per_kwh": "Cost per kWh ($)",
+          "start_time": "Start time",
+          "end_time": "End time",
+          "start": "1 - Start time",
+          "end": "1 - End time",
+          "start_1": "2 - Start time",
+          "end_1": "2 - End time",
+          "start_2": "3 - Start time",
+          "end_2": "3 - End time",
+          "start_3": "4 - Start time",
+          "end_3": "4 - End time",
+          "start_4": "5 - Start time",
+          "end_4": "5 - End time",
+          "start_5": "6 - Start time",
+          "end_5": "6 - End time",
+          "start_6": "7 - Start time",
+          "end_6": "7 - End time",
+          "start_7": "8 - Start time",
+          "end_7": "8 - End time",
+          "start_8": "9 - Start time",
+          "end_8": "9 - End time",
+          "start_9": "10 - Start time",
+          "end_9": "10 - End time",
+          "add_another": "Add another time range",
+          "delete_this_window": "❌ Delete?"
+        }
+      },
+      "wf_window": {
+        "title": "Add window (window-first)",
+        "description": "Define a window and one or more time ranges.",
+        "data": {
+          "window_name": "Window name",
+          "cost_per_kwh": "Cost per kWh ($)",
+          "start_time": "Start time",
+          "end_time": "End time",
+          "add_another": "Add another time range"
+        }
+      },
+      "wf_entities": {
+        "title": "Select entities",
+        "description": "Choose one or more entities to track in this window.",
+        "data": {
+          "entities": "Entities"
+        }
+      }
+    },
+    "error": {
+      "window_start_after_end": "Start time must be earlier than end time.",
+      "at_least_one_window": "At least one window is required (start time before end time).",
+      "range_start_before_previous_end": "Each range must start at or after the previous range's end time. Add ranges in chronological order (earliest first).",
+      "invalid_time": "Invalid time value.",
+      "source_already_in_use": "Sensor already in use, please edit {entry_title}.",
+      "source_entity_required": "Select an energy sensor."
+    },
+    "abort": {
+      "already_configured": "This configuration is already set up."
+    },
+    "defaults": {
+      "entry_title": "Energy Window Tracker (Beta)",
+      "window_name": "Window",
+      "window_fallback": "Window {n}"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Configure Energy Window Tracker (Beta)",
+        "menu_options": {
+          "add_window": "✚ Add new window",
+          "list_windows": "✏️ Manage windows",
+          "source_entity": "⚡️ Update energy source"
+        }
+      },
+      "manage_windows": {
+        "title": "Manage windows",
+        "data": {
+          "window_index": "Select a window",
+          "window_fallback": "Window {n}"
+        },
+        "submit": "Select"
+      },
+      "manage_windows_empty": {
+        "title": "Configure Energy Window Tracker (Beta)",
+        "description": "No windows yet. Use **Add new window** from the previous screen."
+      },
+      "source_entity_confirm": {
+        "title": "Update energy source",
+        "description": "Changing the source will **permanently delete all historical data** for the current source. The source name will be re-used.",
+        "submit": "Continue"
+      },
+      "source_entity": {
+        "title": "Update energy source",
+        "data": {
+          "source_entity": "Energy source",
+          "name": "Friendly name",
+          "remove_previous_entities": "❌ Delete the previously associated windows (otherwise you may manually remove them)"
+        },
+        "submit": "Update"
+      },
+      "confirm_delete": {
+        "title": "Delete window",
+        "description": "Are you sure you want to delete **{window_name}**? This cannot be undone."
+      },
+      "add_window": {
+        "title": "Add new window",
+        "description": "Name the window and define the start and end times.",
+        "data": {
+          "window_name": "Window name",
+          "cost_per_kwh": "Cost per kWh ($)",
+          "start_time": "Start time",
+          "end_time": "End time",
+          "start": "1 - Start time",
+          "end": "1 - End time",
+          "start_1": "2 - Start time",
+          "end_1": "2 - End time",
+          "start_2": "3 - Start time",
+          "end_2": "3 - End time",
+          "start_3": "4 - Start time",
+          "end_3": "4 - End time",
+          "start_4": "5 - Start time",
+          "end_4": "5 - End time",
+          "start_5": "6 - Start time",
+          "end_5": "6 - End time",
+          "start_6": "7 - Start time",
+          "end_6": "7 - End time",
+          "start_7": "8 - Start time",
+          "end_7": "8 - End time",
+          "start_8": "9 - Start time",
+          "end_8": "9 - End time",
+          "start_9": "10 - Start time",
+          "end_9": "10 - End time",
+          "add_another": "Add another time range"
+        },
+        "submit": "Save"
+      },
+      "edit_window": {
+        "title": "Edit window",
+        "data": {
+          "window_name": "Window name",
+          "cost_per_kwh": "Cost per kWh ($)",
+          "start_time": "Start time",
+          "end_time": "End time",
+          "start": "1 - Start time",
+          "end": "1 - End time",
+          "start_1": "2 - Start time",
+          "end_1": "2 - End time",
+          "start_2": "3 - Start time",
+          "end_2": "3 - End time",
+          "start_3": "4 - Start time",
+          "end_3": "4 - End time",
+          "start_4": "5 - Start time",
+          "end_4": "5 - End time",
+          "start_5": "6 - Start time",
+          "end_5": "6 - End time",
+          "start_6": "7 - Start time",
+          "end_6": "7 - End time",
+          "start_7": "8 - Start time",
+          "end_7": "8 - End time",
+          "start_8": "9 - Start time",
+          "end_8": "9 - End time",
+          "start_9": "10 - Start time",
+          "end_9": "10 - End time",
+          "add_another": "Add another time range",
+          "delete_this_window": "❌ Delete?"
+        },
+        "submit": "Save"
+      }
+    },
+    "error": {
+      "window_start_after_end": "Start time must be earlier than end time.",
+      "at_least_one_window": "At least one window is required.",
+      "range_start_before_previous_end": "Each range must start at or after the previous range's end time. Add ranges in chronological order (earliest first).",
+      "invalid_time": "Invalid time value.",
+      "source_entity_required": "Select an energy sensor.",
+      "source_already_in_use": "Sensor already in use, please edit {entry_title}.",
+      "remove_previous_but_source_unchanged": "Same energy source selected. To delete current windows, please do it via the \"Manage windows\" menu."
+    },
+    "abort": {
+      "no_source": "No source configured. Please remove and re-add the integration."
+    }
+  }
+}
