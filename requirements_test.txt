@@ -1,0 +1,10 @@
+# Test dependencies for Energy Window Tracker.
+# Install: pip install -r requirements_test.txt
+# Run: pytest tests/ -v
+
+pytest>=7.0.0
+pytest-asyncio==0.23.5
+homeassistant>=2024.1.0
+pytest-homeassistant-custom-component>=0.13.0
+pre-commit>=3.0.0
+ruff>=0.8.0

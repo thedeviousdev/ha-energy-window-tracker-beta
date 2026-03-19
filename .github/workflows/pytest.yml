@@ -1,0 +1,33 @@
+# Test and lint pipeline for Energy Window Tracker
+# Aligned with https://developers.home-assistant.io/docs/development_testing/
+
+name: pytest
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  pytest:
+    name: pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          enable-cache: true
+          cache-dependency-glob: "requirements_test.txt"
+
+      - name: Install dependencies
+        run: uv pip install --system -r requirements_test.txt
+
+      - name: Run tests
+        run: pytest tests/ -v --tb=short

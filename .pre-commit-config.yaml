@@ -1,0 +1,18 @@
+# Pre-commit hook: run tests and linter before each commit.
+# Install: pre-commit install
+# Run manually: pre-commit run --all-files
+# See https://pre-commit.com/
+
+repos:
+  - repo: local
+    hooks:
+      - id: ruff
+        name: ruff
+        entry: ruff check custom_components/ tests/
+        language: system
+        pass_filenames: false
+      - id: pytest
+        name: pytest
+        entry: pytest tests/ -v --tb=short
+        language: system
+        pass_filenames: false

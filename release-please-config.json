@@ -1,0 +1,20 @@
+{
+  "packages": {
+    ".": {
+      "release-type": "simple",
+      "versioning": "always-bump-patch",
+      "changelog-sections": [
+        { "type": "feat", "section": "Features" },
+        { "type": "fix", "section": "Bug Fixes" },
+        { "type": "refactor", "section": "Refactoring" },
+        { "type": "ci", "section": "CI" },
+        { "type": "chore", "section": "Miscellaneous Chores" },
+        { "type": "docs", "section": "Documentation" }
+      ],
+      "extra-files": [
+        "custom_components/energy_window_tracker_beta/manifest.json",
+        "pyproject.toml"
+      ]
+    }
+  }
+}

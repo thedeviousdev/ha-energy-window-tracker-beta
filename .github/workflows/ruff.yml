@@ -1,0 +1,27 @@
+# Test and lint pipeline for Energy Window Tracker
+# Aligned with https://developers.home-assistant.io/docs/development_testing/
+
+name: Ruff
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened]
+
+jobs:
+  ruff:
+    name: Ruff
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Ruff
+        run: pip install ruff
+
+      - name: Run Ruff
+        run: ruff check custom_components/ tests/ --output-format=github

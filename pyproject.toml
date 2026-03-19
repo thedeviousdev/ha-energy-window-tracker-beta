@@ -1,0 +1,24 @@
+[project]
+name = "ha-energy-window-tracker-beta"
+version = "2.3.38"  # x-release-please-version
+description = "Home Assistant custom integration: Energy Window Tracker (Beta)"
+readme = "README.md"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::PendingDeprecationWarning",
+]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 88
+exclude = [".git", "__pycache__", ".release-please"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W"]
+ignore = ["E501"]
