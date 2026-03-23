@@ -622,11 +622,24 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if self._pending_setup_entry_id:
                 existing = self.hass.config_entries.async_get_entry(self._pending_setup_entry_id)
                 if existing:
-                    await self.hass.config_entries.async_update_entry(
-                        existing,
-                        title=entry_title,
-                        data={CONF_WINDOWS: self._setup_windows},
-                    )
+                    try:
+                        await self.hass.config_entries.async_update_entry(
+                            existing,
+                            title=entry_title,
+                            data={CONF_WINDOWS: self._setup_windows},
+                        )
+                    except Exception:  # noqa: BLE001
+                        _MAIN_LOGGER.exception(
+                            "config flow: failed updating entry (entry_id=%s) for entities=%s",
+                            existing.entry_id,
+                            entities,
+                        )
+                        return self.async_show_form(
+                            step_id="window_entities",
+                            data_schema=schema,
+                            errors={"base": "setup_failed"},
+                        )
+
                     return self.async_show_form(
                         step_id="window_entities_confirm",
                         data_schema=vol.Schema({}),
@@ -645,7 +658,18 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 options={},
                 entry_id=uuid.uuid4().hex,
             )
-            await self.hass.config_entries.async_add(entry)
+            try:
+                await self.hass.config_entries.async_add(entry)
+            except Exception:  # noqa: BLE001
+                _MAIN_LOGGER.exception(
+                    "config flow: failed adding entry for entities=%s",
+                    entities,
+                )
+                return self.async_show_form(
+                    step_id="window_entities",
+                    data_schema=schema,
+                    errors={"base": "setup_failed"},
+                )
             self._pending_setup_entry_id = entry.entry_id
             return self.async_show_form(
                 step_id="window_entities_confirm",

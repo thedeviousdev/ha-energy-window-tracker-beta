@@ -151,7 +151,8 @@
       "range_start_before_previous_end": "Each range must start at or after the previous range's end time. Add ranges in chronological order (earliest first).",
       "invalid_time": "Set the window time to be later than all previous windows",
       "source_already_in_use": "Sensor already in use, please edit {entry_title}.",
-      "source_entity_required": "Select an energy sensor."
+      "source_entity_required": "Select an energy sensor.",
+      "setup_failed": "Failed to create the window(s). Check the server logs for details and try again."
     },
     "abort": {
       "already_configured": "This configuration is already set up."
