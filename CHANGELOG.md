@@ -1,5 +1,20 @@
 # Changelog
 
+## [2.3.41](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.40...v2.3.41) (2026-03-23)
+
+
+### Bug Fixes
+
+* **ui:** add explicit per-range delete ([c3f9a6a](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/c3f9a6a3468a19ec4f904a1940a0f414234b93bc))
+* **ui:** remove delete option and clarify range removal ([aefa67e](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/aefa67eb28a237471b01e1ad242dbf40b38bcc23))
+* **ui:** use time selector + updated time labels ([e141ce7](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/e141ce7b18df75937865fb22a78ae796de39a121))
+* **ui:** use time selector + updated time labels ([#4](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/4)) ([6d70ed6](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/6d70ed67ac75f283c91d793c7a512f94ac903fb4))
+
+
+### Refactoring
+
+* **i18n:** consolidate start/end labels ([9ea75d2](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/9ea75d24cc380afd2f0c2bdba14f7349b884dd14))
+
 ## [2.3.40](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.39...v2.3.40) (2026-03-23)
 
 
