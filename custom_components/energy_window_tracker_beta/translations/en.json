@@ -19,8 +19,6 @@
           "source_name": "Friendly name",
           "window_name": "Window name",
           "cost_per_kwh": "Cost per kWh ($)",
-          "start": "Start time #1",
-          "end": "End time #1",
           "start_1": "Start time #1",
           "end_1": "End time #1",
           "start_2": "Start time #2",
@@ -50,8 +48,6 @@
         "data": {
           "window_name": "Window name",
           "cost_per_kwh": "Cost per kWh ($)",
-          "start": "Start time #1",
-          "end": "End time #1",
           "start_1": "Start time #1",
           "end_1": "End time #1",
           "start_2": "Start time #2",
@@ -80,8 +76,6 @@
         "data": {
           "window_name": "Window name",
           "cost_per_kwh": "Cost per kWh ($)",
-          "start": "Start time #1",
-          "end": "End time #1",
           "start_1": "Start time #1",
           "end_1": "End time #1",
           "start_2": "Start time #2",
@@ -113,8 +107,6 @@
         "data": {
           "window_name": "Window name",
           "cost_per_kwh": "Cost per kWh ($)",
-          "start": "Start time #1",
-          "end": "End time #1",
           "start_1": "Start time #1",
           "end_1": "End time #1",
           "start_2": "Start time #2",
@@ -214,8 +206,6 @@
         "data": {
           "window_name": "Window name",
           "cost_per_kwh": "Cost per kWh ($)",
-          "start": "Start time #1",
-          "end": "End time #1",
           "start_1": "Start time #1",
           "end_1": "End time #1",
           "start_2": "Start time #2",
@@ -245,8 +235,6 @@
         "data": {
           "window_name": "Window name",
           "cost_per_kwh": "Cost per kWh ($)",
-          "start": "Start time #1",
-          "end": "End time #1",
           "start_1": "Start time #1",
           "end_1": "End time #1",
           "start_2": "Start time #2",
