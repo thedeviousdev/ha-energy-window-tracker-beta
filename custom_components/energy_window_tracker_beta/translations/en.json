@@ -199,7 +199,7 @@
       },
       "options_saved": {
         "title": "Success!",
-        "description": "Options successfully saved.\nWindow(s) successfully updated.",
+        "description": "Window(s) successfully updated.",
         "submit": "Finish"
       },
       "confirm_delete": {
