@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.43](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.42...v2.3.43) (2026-03-23)
+
+
+### Features
+
+* improve window flow safety, naming, and time precision ([#8](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/8)) ([3ea1eb1](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/3ea1eb10b56376ca53798f998551ccab7c14fcc7))
+
 ## [2.3.42](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.41...v2.3.42) (2026-03-23)
 
 
