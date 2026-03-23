@@ -446,7 +446,7 @@ async def test_options_edit_window_happy_delete_middle_range_preserves_flow(
             "start_1": "09:00",
             "end_1": "10:00",
             "start_2": "11:00",
-            "end_2": "",
+            "end_2": "11:00",
             "start_3": "13:00",
             "end_3": "14:00",
         },
@@ -507,7 +507,7 @@ async def test_options_edit_window_unhappy_delete_all_ranges_requires_confirmati
             "window_name": "Peak",
             CONF_COST_PER_KWH: 0.2,
             "start_1": "09:00",
-            "end_1": "",
+            "end_1": "09:00",
         },
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
@@ -555,7 +555,7 @@ async def test_options_edit_window_happy_delete_all_ranges_after_confirmation(
             "window_name": "Peak",
             CONF_COST_PER_KWH: 0.2,
             "start_1": "09:00",
-            "end_1": "",
+            "end_1": "09:00",
         },
     )
     assert result["step_id"] == "confirm_delete_window"

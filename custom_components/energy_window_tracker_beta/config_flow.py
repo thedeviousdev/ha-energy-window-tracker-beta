@@ -66,17 +66,6 @@ _RE_HHMMSS = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$")
 _TIME_SELECTOR = selector.TimeSelector()
 
 
-def _time_selector_allow_empty(value: Any) -> Any:
-    """Allow empty/None values for optional time slots.
-
-    When enabled, placeholder range slots can be cleared by the user and will be ignored
-    during range collection (they won't satisfy start < end).
-    """
-    if value in (None, "", [], {}):
-        return None
-    return _TIME_SELECTOR(value)
-
-
 def _is_valid_time_value(time_value: Any) -> bool:
     """Return True if value looks like a valid time input (HH:MM[:SS] string or dict)."""
     try:
@@ -356,24 +345,16 @@ def _build_single_window_multi_range_schema(
         idx = i + 1
         sk, ek = f"start_{idx}", f"end_{idx}"
         r = ranges[i] if i < len(ranges) else {}
-        if i < len(ranges):
-            s_def = _time_to_str(r.get("start") or DEFAULT_WINDOW_START)
-            e_def = _time_to_str(r.get("end") or DEFAULT_WINDOW_END)
-        else:
-            # Placeholder slots should be truly empty when allow_empty_slots is enabled.
-            # That way, clearing an "extra" range does not accidentally keep a default range.
-            s_def = None if allow_empty_slots else _time_to_str(DEFAULT_WINDOW_START)
-            e_def = None if allow_empty_slots else _time_to_str(DEFAULT_WINDOW_END)
+        s_def = _time_to_str(r.get("start") or DEFAULT_WINDOW_START)
+        e_def = _time_to_str(r.get("end") or DEFAULT_WINDOW_END)
         start_desc = labels.get(sk) or "Start time"
         end_desc = labels.get(ek) or "End time"
-        start_validator = _time_selector_allow_empty if allow_empty_slots else _TIME_SELECTOR
-        end_validator = _time_selector_allow_empty if allow_empty_slots else _TIME_SELECTOR
         schema_dict[
             vol.Optional(sk, default=s_def, description=start_desc)
-        ] = start_validator
+        ] = _TIME_SELECTOR
         schema_dict[
             vol.Optional(ek, default=e_def, description=end_desc)
-        ] = end_validator
+        ] = _TIME_SELECTOR
         if include_range_delete:
             schema_dict[
                 vol.Optional(f"delete_range_{idx}", default=False)
