@@ -20,10 +20,10 @@ as well as start_time/end_time for these window steps.
 
 from __future__ import annotations
 
-from collections import OrderedDict
 import logging
 import re
 import uuid
+from collections import OrderedDict
 from typing import Any
 
 import voluptuous as vol

@@ -21,9 +21,9 @@ from custom_components.energy_window_tracker_beta.const import (
     CONF_NAME,
     CONF_SOURCE_ENTITY,
     CONF_SOURCES,
+    CONF_WINDOW_END,
     CONF_WINDOW_NAME,
     CONF_WINDOW_START,
-    CONF_WINDOW_END,
     CONF_WINDOWS,
     DOMAIN,
 )
