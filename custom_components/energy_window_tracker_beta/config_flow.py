@@ -1543,16 +1543,13 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
         return new_options
 
     def _async_create_options_entry(self, options: dict[str, Any]) -> config_entries.FlowResult:
-        """Return a CreateEntry result with both data and options set.
-        Some HA versions expect 'options' in the result for options flow persistence.
-        """
-        result = self.async_create_entry(title=None, data=options)
-        result["options"] = options
+        """Persist options and show success form instead of closing the modal."""
+        self.hass.config_entries.async_update_entry(self._config_entry, options=options)
         _MAIN_LOGGER.warning(
-            "options flow: returning CreateEntry with data and options (entry_id=%s)",
+            "options flow: options saved (entry_id=%s), showing success step",
             self._config_entry.entry_id,
         )
-        return result
+        return self.async_show_form(step_id="options_saved", data_schema=vol.Schema({}))
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -1571,6 +1568,14 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 exc_info=True,
             )
             raise
+
+    async def async_step_options_saved(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Show save confirmation and return to options menu on Finish."""
+        if user_input is not None:
+            return await self._async_step_manage_impl(None)
+        return self.async_show_form(step_id="options_saved", data_schema=vol.Schema({}))
 
     def _async_show_menu(
         self,

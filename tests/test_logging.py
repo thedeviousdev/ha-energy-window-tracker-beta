@@ -156,7 +156,8 @@ async def test_options_flow_save_logging(
             },
         )
 
-    assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "options_saved"
     await hass.async_block_till_done()
 
     messages = _component_messages(caplog)

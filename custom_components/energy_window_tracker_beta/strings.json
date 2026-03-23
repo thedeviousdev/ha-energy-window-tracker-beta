@@ -194,6 +194,11 @@
         },
         "submit": "Update"
       },
+      "options_saved": {
+        "title": "Success!",
+        "description": "Options successfully saved.\nWindow(s) successfully updated.",
+        "submit": "Finish"
+      },
       "confirm_delete": {
         "title": "Delete window",
         "description": "Are you sure you want to delete **{window_name}**? This cannot be undone."
