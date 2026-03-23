@@ -695,7 +695,7 @@ class WindowEnergySensor(RestoreSensor):
 
     async def async_added_to_hass(self) -> None:
         """Restore state and register listeners."""
-        _MAIN_LOGGER.warning("sensor: added to hass - %r entity_id=%s", self._window_name, self.entity_id)
+        _MAIN_LOGGER.debug("sensor: added to hass - %r entity_id=%s", self._window_name, self.entity_id)
         await super().async_added_to_hass()
 
         # Friendly name is window name only (entity_id already includes source from __init__ name).
