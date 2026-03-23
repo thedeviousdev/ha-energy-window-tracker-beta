@@ -1,0 +1,187 @@
+"""Sensor tests for Energy Window Tracker Beta."""
+
+from __future__ import annotations
+
+from unittest.mock import AsyncMock, patch
+
+import pytest
+from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
+from homeassistant.core import HomeAssistant
+from pytest_homeassistant_custom_component.common import MockConfigEntry
+
+from custom_components.energy_window_tracker_beta.const import (
+    CONF_COST_PER_KWH,
+    CONF_ENTITIES,
+    CONF_NAME,
+    CONF_RANGES,
+    CONF_SOURCE_ENTITY,
+    CONF_SOURCES,
+    CONF_WINDOW_END,
+    CONF_WINDOW_NAME,
+    CONF_WINDOW_START,
+    CONF_WINDOWS,
+    DOMAIN,
+)
+from custom_components.energy_window_tracker_beta.sensor import (
+    _get_sources_from_config,
+    _parse_windows,
+)
+
+
+def _get_tracker_sensors(hass: HomeAssistant, entry_id: str) -> list:
+    """Return registry entities belonging to this integration entry."""
+    from homeassistant.helpers import entity_registry as er
+
+    registry = er.async_get(hass)
+    return [
+        e
+        for e in registry.entities.get_entries_for_config_entry_id(entry_id)
+        if e.domain == SENSOR_DOMAIN
+    ]
+
+
+def test_get_sources_from_config_happy_window_first_conversion() -> None:
+    """[Happy] Window-first data converts into source rows grouped by entity."""
+    config = {
+        CONF_WINDOWS: [
+            {
+                CONF_WINDOW_NAME: "Peak",
+                CONF_COST_PER_KWH: 0.2,
+                CONF_ENTITIES: ["sensor.a", "sensor.b"],
+                CONF_RANGES: [
+                    {CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "11:00"},
+                    {CONF_WINDOW_START: "17:00", CONF_WINDOW_END: "19:00"},
+                ],
+            }
+        ]
+    }
+    out = _get_sources_from_config(config)
+    assert len(out) == 2
+    assert {row[CONF_SOURCE_ENTITY] for row in out} == {"sensor.a", "sensor.b"}
+    for row in out:
+        assert len(row[CONF_WINDOWS]) == 2
+        assert row[CONF_WINDOWS][0][CONF_WINDOW_NAME] == "Peak"
+
+
+def test_get_sources_from_config_unhappy_invalid_ranges_filtered() -> None:
+    """[Unhappy] Invalid ranges are dropped during window-first conversion."""
+    config = {
+        CONF_WINDOWS: [
+            {
+                CONF_WINDOW_NAME: "Bad",
+                CONF_ENTITIES: ["sensor.a"],
+                CONF_RANGES: [
+                    {CONF_WINDOW_START: "10:00", CONF_WINDOW_END: "09:00"},
+                    {CONF_WINDOW_START: "11:00", CONF_WINDOW_END: ""},
+                ],
+            }
+        ]
+    }
+    out = _get_sources_from_config(config)
+    assert out == []
+
+
+def test_parse_windows_unhappy_invalid_time_uses_fallback_and_warning() -> None:
+    """[Unhappy] Invalid times in windows are handled safely."""
+    windows, warnings = _parse_windows(
+        {
+            CONF_WINDOWS: [
+                {
+                    CONF_WINDOW_NAME: "Peak",
+                    CONF_WINDOW_START: "25:00",
+                    CONF_WINDOW_END: "99:00",
+                }
+            ]
+        }
+    )
+    assert len(windows) == 1
+    assert windows[0].start_h == 11 and windows[0].start_m == 0
+    assert windows[0].end_h == 14 and windows[0].end_m == 0
+    assert "Peak" in warnings
+    assert len(warnings["Peak"]) >= 1
+
+
+@pytest.mark.asyncio
+async def test_sensor_setup_happy_window_first_entry_creates_sensor(
+    hass: HomeAssistant, mock_window_first_entry
+) -> None:
+    """[Happy] Sensor setup works with window-first entry data."""
+    hass.states.async_set("sensor.today_load", "3.2")
+    with patch(
+        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+        new_callable=AsyncMock,
+        return_value={},
+    ):
+        assert await hass.config_entries.async_setup(mock_window_first_entry.entry_id)
+        await hass.async_block_till_done()
+    entities = _get_tracker_sensors(hass, mock_window_first_entry.entry_id)
+    assert len(entities) == 1
+    state = hass.states.get(entities[0].entity_id)
+    assert state is not None
+    assert state.attributes.get("source_entity") == "sensor.today_load"
+    assert isinstance(state.attributes.get("ranges"), list)
+
+
+@pytest.mark.asyncio
+async def test_sensor_setup_unhappy_source_unavailable(
+    hass: HomeAssistant, mock_window_first_entry
+) -> None:
+    """[Unhappy] Sensor still sets up and reports unavailable source state."""
+    hass.states.async_set("sensor.today_load", "unavailable")
+    with patch(
+        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+        new_callable=AsyncMock,
+        return_value={},
+    ):
+        assert await hass.config_entries.async_setup(mock_window_first_entry.entry_id)
+        await hass.async_block_till_done()
+    entities = _get_tracker_sensors(hass, mock_window_first_entry.entry_id)
+    assert len(entities) == 1
+    state = hass.states.get(entities[0].entity_id)
+    assert state is not None
+    assert state.state in ("unavailable", "unknown")
+
+
+@pytest.mark.asyncio
+async def test_sensor_setup_happy_legacy_entry_multiple_windows(hass: HomeAssistant) -> None:
+    """[Happy] Legacy config with two named windows creates two sensors."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Two Windows",
+        data={
+            CONF_SOURCES: [
+                {
+                    CONF_SOURCE_ENTITY: "sensor.today_load",
+                    CONF_NAME: "Energy",
+                    CONF_WINDOWS: [
+                        {
+                            CONF_WINDOW_NAME: "Peak",
+                            CONF_WINDOW_START: "09:00",
+                            CONF_WINDOW_END: "12:00",
+                            CONF_COST_PER_KWH: 0.2,
+                        },
+                        {
+                            CONF_WINDOW_NAME: "Off-Peak",
+                            CONF_WINDOW_START: "12:00",
+                            CONF_WINDOW_END: "17:00",
+                            CONF_COST_PER_KWH: 0.1,
+                        },
+                    ],
+                }
+            ]
+        },
+        options={},
+        entry_id="two_windows_entry",
+    )
+    entry.add_to_hass(hass)
+    hass.states.async_set("sensor.today_load", "1.0")
+
+    with patch(
+        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+        new_callable=AsyncMock,
+        return_value={},
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+    entities = _get_tracker_sensors(hass, entry.entry_id)
+    assert len(entities) == 2

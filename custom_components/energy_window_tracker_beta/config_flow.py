@@ -20,8 +20,10 @@ as well as start_time/end_time for these window steps.
 
 from __future__ import annotations
 
+from collections import OrderedDict
 import logging
 import re
+import uuid
 from typing import Any
 
 import voluptuous as vol
@@ -61,29 +63,33 @@ _MAIN_LOGGER = logging.getLogger("custom_components.energy_window_tracker_beta")
 # Only accept HH:MM or H:MM so schema defaults are always valid
 _RE_HHMM = re.compile(r"^(\d{1,2}):(\d{2})$")
 
+_TIME_TEXT_SELECTOR = selector.TextSelector(
+    selector.TextSelectorConfig(type="text", autocomplete="off")
+)
 
-def _is_valid_time_value(v: Any) -> bool:
+
+def _is_valid_time_value(time_value: Any) -> bool:
     """Return True if value looks like a valid time input (HH:MM[:SS] string or dict)."""
     try:
-        if v is None:
+        if time_value is None:
             return False
-        if isinstance(v, dict):
-            h = v.get("hour", v.get("hours"))
-            m = v.get("minute", v.get("minutes"))
-            if h is None or m is None:
+        if isinstance(time_value, dict):
+            hour_value = time_value.get("hour", time_value.get("hours"))
+            minute_value = time_value.get("minute", time_value.get("minutes"))
+            if hour_value is None or minute_value is None:
                 return False
-            h_i, m_i = int(h), int(m)
-            return 0 <= h_i <= 23 and 0 <= m_i <= 59
-        s = str(v).strip()
-        if not s:
+            hour_int, minute_int = int(hour_value), int(minute_value)
+            return 0 <= hour_int <= 23 and 0 <= minute_int <= 59
+        time_str = str(time_value).strip()
+        if not time_str:
             return False
-        if s.count(":") >= 2:
-            s = s.rsplit(":", 1)[0]
-        if not _RE_HHMM.match(s):
+        if time_str.count(":") >= 2:
+            time_str = time_str.rsplit(":", 1)[0]
+        if not _RE_HHMM.match(time_str):
             return False
-        hh, mm = s.split(":")
-        h_i, m_i = int(hh, 10), int(mm, 10)
-        return 0 <= h_i <= 23 and 0 <= m_i <= 59
+        hour_str, minute_str = time_str.split(":")
+        hour_int, minute_int = int(hour_str, 10), int(minute_str, 10)
+        return 0 <= hour_int <= 23 and 0 <= minute_int <= 59
     except (TypeError, ValueError):
         return False
 
@@ -91,9 +97,7 @@ def _is_valid_time_value(v: Any) -> bool:
 def _validate_time_fields(data: dict[str, Any], num_ranges: int) -> dict[str, str]:
     """Validate start/end fields; return voluptuous-style errors dict (field -> error_key)."""
     errors: dict[str, str] = {}
-    keys = [("start", "end")]
-    for i in range(1, num_ranges):
-        keys.append((f"start_{i}", f"end_{i}"))
+    keys = [(f"start_{i}", f"end_{i}") for i in range(1, num_ranges + 1)]
     for sk, ek in keys:
         if sk in data and not _is_valid_time_value(data.get(sk)):
             errors[sk] = "invalid_time"
@@ -294,21 +298,9 @@ async def _get_window_form_labels(
     start_time = trans.get(_data_key(step_id, "start_time")) or "Start time"
     end_time = trans.get(_data_key(step_id, "end_time")) or "End time"
     n_r = num_ranges if num_ranges is not None else 1
-    if num_ranges is not None:
-        for i in range(num_ranges):
-            idx = i + 1
-            if i == 0:
-                labels["start"] = f"{idx} - {start_time}"
-                labels["end"] = f"{idx} - {end_time}"
-            else:
-                labels[f"start_{i}"] = f"{idx} - {start_time}"
-                labels[f"end_{i}"] = f"{idx} - {end_time}"
-    else:
-        labels["start"] = f"1 - {start_time}"
-        labels["end"] = f"1 - {end_time}"
-        for i in range(1, n_r):
-            labels[f"start_{i}"] = f"{i + 1} - {start_time}"
-            labels[f"end_{i}"] = f"{i + 1} - {end_time}"
+    for idx in range(1, n_r + 1):
+        labels[f"start_{idx}"] = f"{idx} - {start_time}"
+        labels[f"end_{idx}"] = f"{idx} - {end_time}"
     return labels
 
 
@@ -322,7 +314,7 @@ def _build_single_window_multi_range_schema(
     include_delete: bool = False,
     num_slots: int | None = None,
 ) -> vol.Schema:
-    """Build schema: one window name, one cost, then start/end for range 0, start_1/end_1, ...
+    """Build schema: one window name, one cost, then start/end for start_1/end_1, start_2/end_2, ...
     Labels: "1 - Start time", "1 - End time", "2 - Start time", etc. (built in _get_window_form_labels).
     If num_slots is set, that many range slots are shown; otherwise max(1, len(ranges)).
     """
@@ -343,24 +335,19 @@ def _build_single_window_multi_range_schema(
     )
     num_ranges = num_slots if num_slots is not None else max(1, len(ranges))
     for i in range(num_ranges):
-        if i == 0:
-            sk, ek = "start", "end"
-            s_def = _time_to_str(ranges[0].get("start") if ranges else DEFAULT_WINDOW_START)
-            e_def = _time_to_str(ranges[0].get("end") if ranges else DEFAULT_WINDOW_END)
-        else:
-            sk, ek = f"start_{i}", f"end_{i}"
-            r = ranges[i] if i < len(ranges) else {}
-            s_def = _time_to_str(r.get("start") or DEFAULT_WINDOW_START)
-            e_def = _time_to_str(r.get("end") or DEFAULT_WINDOW_END)
-        # Labels built in _get_window_form_labels: "{index} - Start time" / "{index} - End time"
-        start_desc = labels.get(sk) or labels.get("start") or "Start time"
-        end_desc = labels.get(ek) or labels.get("end") or "End time"
+        idx = i + 1
+        sk, ek = f"start_{idx}", f"end_{idx}"
+        r = ranges[i] if i < len(ranges) else {}
+        s_def = _time_to_str(r.get("start") or DEFAULT_WINDOW_START)
+        e_def = _time_to_str(r.get("end") or DEFAULT_WINDOW_END)
+        start_desc = labels.get(sk) or "Start time"
+        end_desc = labels.get(ek) or "End time"
         schema_dict[
             vol.Optional(sk, default=s_def, description=start_desc)
-        ] = selector.TimeSelector()
+        ] = _TIME_TEXT_SELECTOR
         schema_dict[
             vol.Optional(ek, default=e_def, description=end_desc)
-        ] = selector.TimeSelector()
+        ] = _TIME_TEXT_SELECTOR
     if include_add_another:
         schema_dict[
             vol.Optional("add_another", default=False, description=labels.get("add_another"))
@@ -375,17 +362,13 @@ def _build_single_window_multi_range_schema(
 def _collect_ranges_from_single_window_form(
     data: dict[str, Any], num_ranges: int
 ) -> tuple[str, float, list[tuple[str, str]]]:
-    """From form with window_name, cost_per_kwh, start, end, start_1, end_1, ... return (name, cost, [(start,end), ...])."""
+    """From form with window_name, cost_per_kwh, start_1/end_1, start_2/end_2, ... return (name, cost, [(start,end), ...])."""
     name = (data.get("window_name") or data.get("name") or "").strip()
     cost = _parse_cost(data.get(CONF_COST_PER_KWH))
     out: list[tuple[str, str]] = []
-    start = _time_to_str(data.get("start") or "00:00")
-    end = _time_to_str(data.get("end") or "00:00")
-    if start < end:
-        out.append((start, end))
-    for i in range(1, num_ranges):
-        start = _time_to_str(data.get(f"start_{i}") or "00:00")
-        end = _time_to_str(data.get(f"end_{i}") or "00:00")
+    for idx in range(1, num_ranges + 1):
+        start = _time_to_str(data.get(f"start_{idx}") or "00:00")
+        end = _time_to_str(data.get(f"end_{idx}") or "00:00")
         if start < end:
             out.append((start, end))
     return name, cost, out
@@ -481,6 +464,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._wf_name: str = ""
         self._wf_cost: float = 0.0
         self._wf_ranges: list[dict[str, str]] = []
+        self._pending_wf_entry_id: str | None = None
 
     def _get_pending_source(self) -> dict[str, Any]:
         """Get the single pending source (during initial flow before entry exists)."""
@@ -573,7 +557,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_wf_entities(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Window-first setup: select entities assigned to this window."""
+        """Window-first setup: select entities assigned to this window and create entry."""
         schema = vol.Schema(
             {
                 vol.Required(CONF_ENTITIES): selector.EntitySelector(
@@ -589,48 +573,77 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data_schema=schema,
                     errors={"base": "source_entity_required"},
                 )
-            self._wf_windows.append(
+            # Window-first setup defines exactly one window group for this flow.
+            # If the user navigates back to edit, we should replace the payload
+            # rather than accumulating duplicates.
+            self._wf_windows = [
                 {
                     CONF_WINDOW_NAME: self._wf_name or None,
                     CONF_COST_PER_KWH: self._wf_cost,
                     CONF_RANGES: list(self._wf_ranges),
                     CONF_ENTITIES: entities,
                 }
+            ]
+            defaults = await _get_config_defaults(self.hass)
+            # Use the configured window name as the config entry title so
+            # it shows up in "Integration entries" as the actual window.
+            entry_title = (
+                (self._wf_name or "").strip()
+                or (
+                    self._wf_windows[0].get(CONF_WINDOW_NAME)
+                    if self._wf_windows
+                    else None
+                )
+                or defaults["entry_title"]
             )
-            self._wf_name = ""
-            self._wf_cost = 0.0
-            self._wf_ranges = []
-            return await self.async_step_wf_more()
+            # If we already created an entry in this flow (e.g. after clicking "Edit"),
+            # update it instead of creating a duplicate.
+            if self._pending_wf_entry_id:
+                existing = self.hass.config_entries.async_get_entry(self._pending_wf_entry_id)
+                if existing:
+                    await self.hass.config_entries.async_update_entry(
+                        existing,
+                        title=entry_title,
+                        data={CONF_WINDOWS: self._wf_windows},
+                    )
+                    return self.async_show_form(
+                        step_id="wf_entities_confirm",
+                        data_schema=vol.Schema({}),
+                        errors={},
+                    )
+
+            # Create and add the config entry immediately so sensors are set up right away,
+            # then keep the flow open with a confirmation screen.
+            entry = config_entries.ConfigEntry(
+                version=self.VERSION,
+                minor_version=0,
+                domain=DOMAIN,
+                title=entry_title,
+                data={CONF_WINDOWS: self._wf_windows},
+                source=config_entries.SOURCE_USER,
+                options={},
+                entry_id=uuid.uuid4().hex,
+            )
+            await self.hass.config_entries.async_add(entry)
+            self._pending_wf_entry_id = entry.entry_id
+            return self.async_show_form(
+                step_id="wf_entities_confirm",
+                data_schema=vol.Schema({}),
+                errors={},
+            )
         return self.async_show_form(step_id="wf_entities", data_schema=schema, errors={})
 
-    async def async_step_wf_more(
+    async def async_step_wf_entities_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Window-first setup menu."""
-        if user_input is not None:
-            next_step = user_input.get("next_step_id")
-            if next_step == "wf_window":
-                return await self.async_step_wf_window()
-            if next_step == "wf_done":
-                return await self.async_step_wf_done()
-        return {
-            "type": data_entry_flow.FlowResultType.MENU,
-            "flow_id": self.flow_id,
-            "handler": self.handler,
-            "step_id": "wf_more",
-            "menu_options": {"wf_window": "✚ Add new window", "wf_done": "Done"},
-            "title": "Configure Energy Window Tracker (Beta)",
-        }
-
-    async def async_step_wf_done(
-        self, user_input: dict[str, Any] | None = None
-    ) -> config_entries.FlowResult:
-        """Create entry for window-first setup."""
-        defaults = await _get_config_defaults(self.hass)
-        return self.async_create_entry(
-            title=defaults["entry_title"],
-            data={CONF_WINDOWS: self._wf_windows},
-        )
+        """Confirmation after adding entities; send user to the options "Edit" screen."""
+        if not self._pending_wf_entry_id:
+            # Should never happen, but keep the UX predictable.
+            return await self.async_step_configure_menu(None)
+        # Home Assistant does not support chaining a different flow type (options)
+        # directly from within a config-flow step response. Return to the window
+        # edit form in the same modal instead.
+        return await self.async_step_wf_window(None)
 
     async def async_step_windows(
         self, user_input: dict[str, Any] | None = None
@@ -657,13 +670,16 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             time_errors = _validate_time_fields(user_input, num_ranges)
             if time_errors:
                 ranges_for_form = [
-                    {"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}
+                    {
+                        "start": user_input.get("start_1") or "00:00",
+                        "end": user_input.get("end_1") or "00:00",
+                    }
                 ]
                 for i in range(1, num_ranges):
                     ranges_for_form.append(
                         {
-                            "start": user_input.get(f"start_{i}") or "00:00",
-                            "end": user_input.get(f"end_{i}") or "00:00",
+                            "start": user_input.get(f"start_{i + 1}") or "00:00",
+                            "end": user_input.get(f"end_{i + 1}") or "00:00",
                         }
                     )
                 err_labels = await _get_window_form_labels(self.hass, "config", "windows", num_ranges=num_ranges)
@@ -686,12 +702,19 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 user_input, num_ranges_for_collect
             )
             if not ranges:
-                first_start = _time_to_str(user_input.get("start") or "00:00")
-                first_end = _time_to_str(user_input.get("end") or "00:00")
+                first_start = _time_to_str(user_input.get("start_1") or "00:00")
+                first_end = _time_to_str(user_input.get("end_1") or "00:00")
                 errors["base"] = "window_start_after_end" if first_start >= first_end else "at_least_one_window"
-                ranges_for_form = [{"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}]
+                ranges_for_form = [
+                    {"start": user_input.get("start_1") or "00:00", "end": user_input.get("end_1") or "00:00"}
+                ]
                 for i in range(1, num_ranges_for_collect):
-                    ranges_for_form.append({"start": user_input.get(f"start_{i}") or "00:00", "end": user_input.get(f"end_{i}") or "00:00"})
+                    ranges_for_form.append(
+                        {
+                            "start": user_input.get(f"start_{i + 1}") or "00:00",
+                            "end": user_input.get(f"end_{i + 1}") or "00:00",
+                        }
+                    )
                 err_labels = await _get_window_form_labels(
                     self.hass, "config", "windows", num_ranges=num_ranges_for_collect
                 )
@@ -709,9 +732,16 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             range_error = _validate_ranges_chronological(ranges)
             if range_error:
                 errors["base"] = range_error
-                ranges_for_form = [{"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}]
+                ranges_for_form = [
+                    {"start": user_input.get("start_1") or "00:00", "end": user_input.get("end_1") or "00:00"}
+                ]
                 for i in range(1, num_ranges_for_collect):
-                    ranges_for_form.append({"start": user_input.get(f"start_{i}") or "00:00", "end": user_input.get(f"end_{i}") or "00:00"})
+                    ranges_for_form.append(
+                        {
+                            "start": user_input.get(f"start_{i + 1}") or "00:00",
+                            "end": user_input.get(f"end_{i + 1}") or "00:00",
+                        }
+                    )
                 err_labels = await _get_window_form_labels(
                     self.hass, "config", "windows", num_ranges=num_ranges_for_collect
                 )
@@ -872,7 +902,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         num_ranges = len(self._pending_add_ranges) + 1
         labels = await _get_window_form_labels(self.hass, "config", "add_window", num_ranges=num_ranges)
 
-        if user_input is not None and "start" in user_input:
+        if user_input is not None and "start_1" in user_input:
             # After "Add another time range" the form has more slots; use that count when collecting
             num_ranges_for_collect = (
                 len(self._pending_add_ranges) + 1 if self._pending_add_ranges else max(num_ranges, 1)
@@ -880,13 +910,16 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             time_errors = _validate_time_fields(user_input, num_ranges_for_collect)
             if time_errors:
                 ranges_for_form = [
-                    {"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}
+                    {
+                        "start": user_input.get("start_1") or "00:00",
+                        "end": user_input.get("end_1") or "00:00",
+                    }
                 ]
                 for i in range(1, num_ranges_for_collect):
                     ranges_for_form.append(
                         {
-                            "start": user_input.get(f"start_{i}") or "00:00",
-                            "end": user_input.get(f"end_{i}") or "00:00",
+                            "start": user_input.get(f"start_{i + 1}") or "00:00",
+                            "end": user_input.get(f"end_{i + 1}") or "00:00",
                         }
                     )
                 schema = _build_single_window_multi_range_schema(
@@ -904,12 +937,22 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 user_input, num_ranges_for_collect
             )
             if not ranges:
-                first_start = _time_to_str(user_input.get("start") or "00:00")
-                first_end = _time_to_str(user_input.get("end") or "00:00")
+                first_start = _time_to_str(user_input.get("start_1") or "00:00")
+                first_end = _time_to_str(user_input.get("end_1") or "00:00")
                 errors = {"base": "window_start_after_end" if first_start >= first_end else "at_least_one_window"}
-                ranges_for_form = [{"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}]
+                ranges_for_form = [
+                    {
+                        "start": user_input.get("start_1") or "00:00",
+                        "end": user_input.get("end_1") or "00:00",
+                    }
+                ]
                 for i in range(1, num_ranges_for_collect):
-                    ranges_for_form.append({"start": user_input.get(f"start_{i}") or "00:00", "end": user_input.get(f"end_{i}") or "00:00"})
+                    ranges_for_form.append(
+                        {
+                            "start": user_input.get(f"start_{i + 1}") or "00:00",
+                            "end": user_input.get(f"end_{i + 1}") or "00:00",
+                        }
+                    )
                 schema = _build_single_window_multi_range_schema(
                     labels, None, w_name or "", cost, ranges_for_form, include_add_another=True, include_delete=False,
                     num_slots=num_ranges_for_collect,
@@ -918,9 +961,19 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             range_error = _validate_ranges_chronological(ranges)
             if range_error:
                 errors = {"base": range_error}
-                ranges_for_form = [{"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}]
+                ranges_for_form = [
+                    {
+                        "start": user_input.get("start_1") or "00:00",
+                        "end": user_input.get("end_1") or "00:00",
+                    }
+                ]
                 for i in range(1, num_ranges_for_collect):
-                    ranges_for_form.append({"start": user_input.get(f"start_{i}") or "00:00", "end": user_input.get(f"end_{i}") or "00:00"})
+                    ranges_for_form.append(
+                        {
+                            "start": user_input.get(f"start_{i + 1}") or "00:00",
+                            "end": user_input.get(f"end_{i + 1}") or "00:00",
+                        }
+                    )
                 schema = _build_single_window_multi_range_schema(
                     labels, None, w_name or "", cost, ranges_for_form, include_add_another=True, include_delete=False,
                     num_slots=num_ranges_for_collect,
@@ -1042,13 +1095,16 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             time_errors = _validate_time_fields(user_input, num_ranges)
             if time_errors:
                 ranges_for_form = [
-                    {"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}
+                    {
+                        "start": user_input.get("start_1") or "00:00",
+                        "end": user_input.get("end_1") or "00:00",
+                    }
                 ]
                 for i in range(1, num_ranges):
                     ranges_for_form.append(
                         {
-                            "start": user_input.get(f"start_{i}") or "00:00",
-                            "end": user_input.get(f"end_{i}") or "00:00",
+                            "start": user_input.get(f"start_{i + 1}") or "00:00",
+                            "end": user_input.get(f"end_{i + 1}") or "00:00",
                         }
                     )
                 schema = _build_single_window_multi_range_schema(
@@ -1064,21 +1120,23 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_show_form(step_id="edit_window", data_schema=schema, errors=time_errors)
             w_name, cost_val, ranges_list = _collect_ranges_from_single_window_form(user_input, num_ranges)
             if not ranges_list:
-                first_start = _time_to_str(user_input.get("start") or "00:00")
-                first_end = _time_to_str(user_input.get("end") or "00:00")
+                first_start = _time_to_str(user_input.get("start_1") or "00:00")
+                first_end = _time_to_str(user_input.get("end_1") or "00:00")
                 err = "window_start_after_end" if first_start >= first_end else "at_least_one_window"
                 schema = _build_single_window_multi_range_schema(
                     labels, None, w_name or "", cost_val,
-                    [{"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}],
+                    [{"start": user_input.get("start_1") or "00:00", "end": user_input.get("end_1") or "00:00"}],
                     include_add_another=True, include_delete=True,
                     num_slots=num_ranges,
                 )
                 return self.async_show_form(step_id="edit_window", data_schema=schema, errors={"base": err})
             range_error = _validate_ranges_chronological(ranges_list)
             if range_error:
-                ranges_for_form = [{"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}]
+                ranges_for_form = [{"start": user_input.get("start_1") or "00:00", "end": user_input.get("end_1") or "00:00"}]
                 for i in range(1, num_ranges):
-                    ranges_for_form.append({"start": user_input.get(f"start_{i}") or "00:00", "end": user_input.get(f"end_{i}") or "00:00"})
+                    ranges_for_form.append(
+                        {"start": user_input.get(f"start_{i + 1}") or "00:00", "end": user_input.get(f"end_{i + 1}") or "00:00"}
+                    )
                 schema = _build_single_window_multi_range_schema(
                     labels, None, w_name or "", cost_val, ranges_for_form,
                     include_add_another=True, include_delete=True,
@@ -1158,15 +1216,80 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
 
 def _get_sources_from_entry(entry: config_entries.ConfigEntry) -> list[dict[str, Any]]:
-    """Get list of sources from entry (CONF_SOURCES)."""
+    """Get list of sources from entry.
+
+    Supports both:
+    - Legacy format: entry.data/options contain `sources` (CONF_SOURCES).
+    - Window-first format: entry.data contains `windows` (CONF_WINDOWS), where each window
+      entry contains `entities` (CONF_ENTITIES) and `ranges` (CONF_RANGES).
+    """
     current = {**entry.data, **(entry.options or {})}
     raw = current.get(CONF_SOURCES)
     if isinstance(raw, list):
         out = list(raw)
         _MAIN_LOGGER.warning("_get_sources_from_entry: entry_id=%s len(sources)=%s", entry.entry_id, len(out))
         return out
-    _MAIN_LOGGER.warning("_get_sources_from_entry: entry_id=%s no list, returning []", entry.entry_id)
-    return []
+
+    # Window-first entry created by this integration: convert to the legacy
+    # `sources` schema shape so the options flow can function.
+    windows = current.get(CONF_WINDOWS)
+    if not isinstance(windows, list) or not windows:
+        _MAIN_LOGGER.warning("_get_sources_from_entry: entry_id=%s no sources/windows, returning []", entry.entry_id)
+        return []
+
+    by_entity: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
+    for i, w in enumerate(windows):
+        if not isinstance(w, dict):
+            continue
+        entities = w.get(CONF_ENTITIES)
+        ranges = w.get(CONF_RANGES)
+        if not isinstance(entities, list) or not isinstance(ranges, list):
+            continue
+        name = (w.get(CONF_WINDOW_NAME) or "").strip() or f"Window {i + 1}"
+        cost = 0.0
+        try:
+            if w.get(CONF_COST_PER_KWH) is not None:
+                cost = max(0.0, float(w.get(CONF_COST_PER_KWH)))
+        except (TypeError, ValueError):
+            cost = 0.0
+
+        range_rows: list[dict[str, Any]] = []
+        for r in ranges:
+            if not isinstance(r, dict):
+                continue
+            start = str(r.get(CONF_WINDOW_START) or "").strip()
+            end = str(r.get(CONF_WINDOW_END) or "").strip()
+            if not start or not end or start >= end:
+                continue
+            range_rows.append(
+                {
+                    CONF_WINDOW_NAME: name,
+                    CONF_WINDOW_START: start,
+                    CONF_WINDOW_END: end,
+                    CONF_COST_PER_KWH: cost,
+                }
+            )
+
+        if not range_rows:
+            continue
+
+        for entity_id in entities:
+            if not isinstance(entity_id, str) or not entity_id.strip():
+                continue
+            eid = entity_id.strip()
+            by_entity.setdefault(eid, []).extend(range_rows)
+
+    out: list[dict[str, Any]] = []
+    for entity_id, entity_windows in by_entity.items():
+        out.append(
+            {
+                CONF_SOURCE_ENTITY: entity_id,
+                CONF_NAME: entity_id.split(".", 1)[-1].replace("_", " ").title(),
+                CONF_WINDOWS: entity_windows,
+            }
+        )
+    _MAIN_LOGGER.warning("_get_sources_from_entry: entry_id=%s converted %s sources", entry.entry_id, len(out))
+    return out
 
 
 def _entry_using_source_entity(
@@ -1344,8 +1467,8 @@ def _build_single_window_schema(
             pass
     schema_dict: dict[Any, Any] = {
         vol.Optional(CONF_WINDOW_NAME, default=name_val): str,
-        vol.Optional("start", default=start_val): selector.TimeSelector(),
-        vol.Optional("end", default=end_val): selector.TimeSelector(),
+        vol.Optional("start", default=start_val): _TIME_TEXT_SELECTOR,
+        vol.Optional("end", default=end_val): _TIME_TEXT_SELECTOR,
         vol.Optional(
             CONF_COST_PER_KWH,
             default=cost_val,
@@ -1686,7 +1809,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
         num_ranges = len(self._pending_add_ranges) + 1
         labels = await _get_window_form_labels(self.hass, "options", "add_window", num_ranges=num_ranges)
 
-        if user_input is not None and "start" in user_input:
+        if user_input is not None and "start_1" in user_input:
             _MAIN_LOGGER.warning(
                 "options: add_window - form submitted (ranges=%s, add_another=%s)",
                 num_ranges,
@@ -1695,13 +1818,16 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             time_errors = _validate_time_fields(user_input, num_ranges)
             if time_errors:
                 ranges_for_form = [
-                    {"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}
+                    {
+                        "start": user_input.get("start_1") or "00:00",
+                        "end": user_input.get("end_1") or "00:00",
+                    }
                 ]
                 for i in range(1, num_ranges):
                     ranges_for_form.append(
                         {
-                            "start": user_input.get(f"start_{i}") or "00:00",
-                            "end": user_input.get(f"end_{i}") or "00:00",
+                            "start": user_input.get(f"start_{i + 1}") or "00:00",
+                            "end": user_input.get(f"end_{i + 1}") or "00:00",
                         }
                     )
                 schema = _build_single_window_multi_range_schema(
@@ -1717,12 +1843,22 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 return self.async_show_form(step_id="add_window", data_schema=schema, errors=time_errors)
             w_name, cost, ranges_list = _collect_ranges_from_single_window_form(user_input, num_ranges)
             if not ranges_list:
-                first_start = _time_to_str(user_input.get("start") or "00:00")
-                first_end = _time_to_str(user_input.get("end") or "00:00")
+                first_start = _time_to_str(user_input.get("start_1") or "00:00")
+                first_end = _time_to_str(user_input.get("end_1") or "00:00")
                 err = "window_start_after_end" if first_start >= first_end else "at_least_one_window"
-                ranges_for_form = [{"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}]
+                ranges_for_form = [
+                    {
+                        "start": user_input.get("start_1") or "00:00",
+                        "end": user_input.get("end_1") or "00:00",
+                    }
+                ]
                 for i in range(1, num_ranges):
-                    ranges_for_form.append({"start": user_input.get(f"start_{i}") or "00:00", "end": user_input.get(f"end_{i}") or "00:00"})
+                    ranges_for_form.append(
+                        {
+                            "start": user_input.get(f"start_{i + 1}") or "00:00",
+                            "end": user_input.get(f"end_{i + 1}") or "00:00",
+                        }
+                    )
                 schema = _build_single_window_multi_range_schema(
                     labels, None, w_name or "", cost, ranges_for_form, include_add_another=True, include_delete=False,
                     num_slots=num_ranges,
@@ -1730,9 +1866,19 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 return self.async_show_form(step_id="add_window", data_schema=schema, errors={"base": err})
             range_error = _validate_ranges_chronological(ranges_list)
             if range_error:
-                ranges_for_form = [{"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}]
+                ranges_for_form = [
+                    {
+                        "start": user_input.get("start_1") or "00:00",
+                        "end": user_input.get("end_1") or "00:00",
+                    }
+                ]
                 for i in range(1, num_ranges):
-                    ranges_for_form.append({"start": user_input.get(f"start_{i}") or "00:00", "end": user_input.get(f"end_{i}") or "00:00"})
+                    ranges_for_form.append(
+                        {
+                            "start": user_input.get(f"start_{i + 1}") or "00:00",
+                            "end": user_input.get(f"end_{i + 1}") or "00:00",
+                        }
+                    )
                 schema = _build_single_window_multi_range_schema(
                     labels, None, w_name or "", cost, ranges_for_form, include_add_another=True, include_delete=False,
                     num_slots=num_ranges,
@@ -1828,13 +1974,16 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             time_errors = _validate_time_fields(user_input, num_ranges_for_collect)
             if time_errors:
                 ranges_for_form = [
-                    {"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}
+                    {
+                        "start": user_input.get("start_1") or "00:00",
+                        "end": user_input.get("end_1") or "00:00",
+                    }
                 ]
                 for i in range(1, num_ranges_for_collect):
                     ranges_for_form.append(
                         {
-                            "start": user_input.get(f"start_{i}") or "00:00",
-                            "end": user_input.get(f"end_{i}") or "00:00",
+                            "start": user_input.get(f"start_{i + 1}") or "00:00",
+                            "end": user_input.get(f"end_{i + 1}") or "00:00",
                         }
                     )
                 err_labels = await _get_window_form_labels(
@@ -1855,14 +2004,19 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 user_input, num_ranges_for_collect
             )
             if not ranges_list:
-                first_start = _time_to_str(user_input.get("start") or "00:00")
-                first_end = _time_to_str(user_input.get("end") or "00:00")
+                first_start = _time_to_str(user_input.get("start_1") or "00:00")
+                first_end = _time_to_str(user_input.get("end_1") or "00:00")
                 err = "window_start_after_end" if first_start >= first_end else "at_least_one_window"
-                ranges_for_form = [{"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}]
+                ranges_for_form = [
+                    {
+                        "start": user_input.get("start_1") or "00:00",
+                        "end": user_input.get("end_1") or "00:00",
+                    }
+                ]
                 for i in range(1, num_ranges_for_collect):
                     ranges_for_form.append({
-                        "start": user_input.get(f"start_{i}") or "00:00",
-                        "end": user_input.get(f"end_{i}") or "00:00",
+                        "start": user_input.get(f"start_{i + 1}") or "00:00",
+                        "end": user_input.get(f"end_{i + 1}") or "00:00",
                     })
                 err_labels = await _get_window_form_labels(
                     self.hass, "options", "edit_window", num_ranges=num_ranges_for_collect
@@ -1876,11 +2030,16 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 return self.async_show_form(step_id="edit_window", data_schema=schema, errors={"base": err})
             range_error = _validate_ranges_chronological(ranges_list)
             if range_error:
-                ranges_for_form = [{"start": user_input.get("start") or "00:00", "end": user_input.get("end") or "00:00"}]
+                ranges_for_form = [
+                    {
+                        "start": user_input.get("start_1") or "00:00",
+                        "end": user_input.get("end_1") or "00:00",
+                    }
+                ]
                 for i in range(1, num_ranges_for_collect):
                     ranges_for_form.append({
-                        "start": user_input.get(f"start_{i}") or "00:00",
-                        "end": user_input.get(f"end_{i}") or "00:00",
+                        "start": user_input.get(f"start_{i + 1}") or "00:00",
+                        "end": user_input.get(f"end_{i + 1}") or "00:00",
                     })
                 err_labels = await _get_window_form_labels(
                     self.hass, "options", "edit_window", num_ranges=num_ranges_for_collect
