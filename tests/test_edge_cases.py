@@ -203,7 +203,9 @@ async def test_window_setup_unhappy_seconds_overlap_rejected(
 
 
 @pytest.mark.asyncio
-async def test_options_add_window_start_ge_end_rejected(hass: HomeAssistant, mock_legacy_config_entry) -> None:
+async def test_options_add_window_start_ge_end_rejected(
+    hass: HomeAssistant, mock_legacy_config_entry
+) -> None:
     """[Unhappy] options add_window: start >= end shows window_start_after_end."""
     hass.states.async_set("sensor.today_load", "0")
     with patch(
@@ -211,7 +213,9 @@ async def test_options_add_window_start_ge_end_rejected(hass: HomeAssistant, moc
         new_callable=AsyncMock,
         return_value={},
     ):
-        opts = await hass.config_entries.options.async_init(mock_legacy_config_entry.entry_id)
+        opts = await hass.config_entries.options.async_init(
+            mock_legacy_config_entry.entry_id
+        )
 
     result = await hass.config_entries.options.async_configure(
         opts["flow_id"], {"next_step_id": "add_window"}
@@ -243,7 +247,9 @@ async def test_options_add_window_invalid_time_value_field_error(
         new_callable=AsyncMock,
         return_value={},
     ):
-        opts = await hass.config_entries.options.async_init(mock_legacy_config_entry.entry_id)
+        opts = await hass.config_entries.options.async_init(
+            mock_legacy_config_entry.entry_id
+        )
 
     result = await hass.config_entries.options.async_configure(
         opts["flow_id"], {"next_step_id": "add_window"}
@@ -390,13 +396,16 @@ async def test_sensor_same_day_snapshot_used_during_window(hass: HomeAssistant) 
         "snapshot_date": today,
         "windows": {"0": {"snapshot_start": 1.0, "snapshot_end": None}},
     }
-    with patch(
-        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
-        new_callable=AsyncMock,
-        return_value=stored,
-    ), patch(
-        "custom_components.energy_window_tracker_beta.sensor.dt_util.now",
-        return_value=noon_today,
+    with (
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+            new_callable=AsyncMock,
+            return_value=stored,
+        ),
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.dt_util.now",
+            return_value=noon_today,
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -433,16 +442,20 @@ async def test_sensor_stale_snapshot_discarded_when_late_snapshot_disabled(
         "snapshot_date": stale,
         "windows": {"0": {"snapshot_start": 1.0, "snapshot_end": None}},
     }
-    with patch(
-        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
-        new_callable=AsyncMock,
-        return_value=stored,
-    ), patch(
-        "custom_components.energy_window_tracker_beta.sensor.dt_util.now",
-        return_value=noon_today,
-    ), patch(
-        "custom_components.energy_window_tracker_beta.sensor.WindowData.take_late_start_snapshot",
-        return_value=False,
+    with (
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+            new_callable=AsyncMock,
+            return_value=stored,
+        ),
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.dt_util.now",
+            return_value=noon_today,
+        ),
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.WindowData.take_late_start_snapshot",
+            return_value=False,
+        ),
     ):
         assert await hass.config_entries.async_setup(entry.entry_id)
         await hass.async_block_till_done()
@@ -454,7 +467,9 @@ async def test_sensor_stale_snapshot_discarded_when_late_snapshot_disabled(
 
 
 @pytest.mark.asyncio
-async def test_sensor_invalid_config_times_expose_config_warnings(hass: HomeAssistant) -> None:
+async def test_sensor_invalid_config_times_expose_config_warnings(
+    hass: HomeAssistant,
+) -> None:
     """[Unhappy] Invalid configured window times do not crash; config_warnings is exposed."""
     # Use the legacy CONF_SOURCES format so the invalid times are not filtered out
     # by the windows-based conversion's string start/end comparisons.
@@ -498,7 +513,9 @@ async def test_sensor_invalid_config_times_expose_config_warnings(hass: HomeAssi
 
 
 @pytest.mark.asyncio
-async def test_unique_ids_stable_when_window_groups_reordered(hass: HomeAssistant) -> None:
+async def test_unique_ids_stable_when_window_groups_reordered(
+    hass: HomeAssistant,
+) -> None:
     """[Happy] Reordering window groups must not swap unique_ids."""
     entry_id = "reorder_unique_id"
     source_entity = "sensor.today_load"
@@ -631,7 +648,10 @@ async def test_unique_ids_only_change_for_renamed_window(hass: HomeAssistant) ->
 
     after = _unique_ids_by_entity_id(hass, entry.entry_id)
     assert set(after.values()) == {super_peak_uid, off_uid}
-    assert after[off_entity_id] == off_uid, "Off-Peak should keep same unique_id and entity_id"
+    assert after[off_entity_id] == off_uid, (
+        "Off-Peak should keep same unique_id and entity_id"
+    )
     assert peak_uid not in set(after.values()), "old Peak unique_id should be removed"
-    assert super_peak_uid in set(after.values()), "new Super Peak unique_id should exist"
-
+    assert super_peak_uid in set(after.values()), (
+        "new Super Peak unique_id should exist"
+    )

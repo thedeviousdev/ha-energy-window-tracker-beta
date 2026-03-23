@@ -243,7 +243,7 @@
       },
       "edit_window": {
         "title": "Edit window",
-        "description": "Clear a start or end time to remove that range. If all ranges are removed, the window will be deleted after confirmation.",
+        "description": "To remove a range, set its start time equal to or later than its end time. If all ranges are removed, the window will be deleted after confirmation.",
         "data": {
           "window_name": "Window name",
           "cost_per_kwh": "Cost per kWh ($)",

@@ -37,7 +37,11 @@ COMPONENT_LOGGERS = (
 
 def _component_records(caplog: pytest.LogCaptureFixture) -> list[logging.LogRecord]:
     """Return log records emitted by our component."""
-    return [r for r in caplog.records if r.name.startswith("custom_components.energy_window_tracker_beta")]
+    return [
+        r
+        for r in caplog.records
+        if r.name.startswith("custom_components.energy_window_tracker_beta")
+    ]
 
 
 def _component_messages(caplog: pytest.LogCaptureFixture) -> str:
@@ -129,13 +133,16 @@ async def test_options_flow_save_happy_logging(
     hass.states.async_set("sensor.today_load", "0")
     hass.states.async_set("sensor.today_import", "0")
 
-    with patch(
-        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
-        new_callable=AsyncMock,
-        return_value={},
-    ), patch(
-        "custom_components.energy_window_tracker_beta.sensor.Store.async_save",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+            new_callable=AsyncMock,
+            return_value={},
+        ),
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.Store.async_save",
+            new_callable=AsyncMock,
+        ),
     ):
         opts_result = await hass.config_entries.options.async_init(
             mock_legacy_config_entry.entry_id
@@ -255,13 +262,16 @@ async def test_sensor_save_happy_logging(
         caplog.set_level(logging.DEBUG, logger=logger_name)
 
     hass.states.async_set("sensor.today_load", "5.0")
-    with patch(
-        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
-        new_callable=AsyncMock,
-        return_value={},
-    ), patch(
-        "custom_components.energy_window_tracker_beta.sensor.Store.async_save",
-        new_callable=AsyncMock,
+    with (
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+            new_callable=AsyncMock,
+            return_value={},
+        ),
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.Store.async_save",
+            new_callable=AsyncMock,
+        ),
     ):
         assert await hass.config_entries.async_setup(mock_legacy_config_entry.entry_id)
         await hass.async_block_till_done()
@@ -340,4 +350,3 @@ async def test_sensor_cost_calc_unhappy_fail_logging(
     entity._update_value()
     messages = _component_messages(caplog)
     assert "cost calc failed" in messages
-

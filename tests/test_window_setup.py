@@ -87,10 +87,10 @@ async def test_window_setup_happy_create_entry_and_sensor(hass: HomeAssistant) -
 
 
 @pytest.mark.asyncio
-async def test_window_setup_happy_clear_extra_placeholder_range_slot_deletes_it(
+async def test_window_setup_happy_neutralize_extra_placeholder_range_slot_deletes_it(
     hass: HomeAssistant,
 ) -> None:
-    """[Happy] Clearing an extra range slot should not persist a placeholder range."""
+    """[Happy] Making an extra range slot invalid (start>=end) should not persist it."""
     hass.states.async_set("sensor.today_load", "12.0")
 
     result = await hass.config_entries.flow.async_init(
@@ -112,7 +112,7 @@ async def test_window_setup_happy_clear_extra_placeholder_range_slot_deletes_it(
     )
     assert result["step_id"] == "window_setup"
 
-    # Clear the extra placeholder range slot by submitting empty start/end.
+    # Neutralize the extra placeholder range slot by submitting start>=end.
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {
@@ -120,8 +120,8 @@ async def test_window_setup_happy_clear_extra_placeholder_range_slot_deletes_it(
             "cost_per_kwh": 0.2,
             "start_1": "09:00:00",
             "end_1": "11:00:00",
-            "start_2": "",
-            "end_2": "",
+            "start_2": "17:00:00",
+            "end_2": "17:00:00",
         },
     )
     assert result["step_id"] == "window_entities"
@@ -141,4 +141,3 @@ async def test_window_setup_happy_clear_extra_placeholder_range_slot_deletes_it(
     assert len(windows[0]["ranges"]) == 1
     assert windows[0]["ranges"][0]["start"] == "09:00:00"
     assert windows[0]["ranges"][0]["end"] == "11:00:00"
-
