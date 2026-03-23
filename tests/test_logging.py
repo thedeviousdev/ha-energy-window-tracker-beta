@@ -63,7 +63,7 @@ def _get_sensor_entity(hass: HomeAssistant, entry_id: str):
 
 
 @pytest.mark.asyncio
-async def test_setup_and_unload_logging(
+async def test_setup_and_unload_happy_logging(
     hass: HomeAssistant,
     mock_legacy_config_entry: ConfigEntry,
     caplog: pytest.LogCaptureFixture,
@@ -98,7 +98,7 @@ async def test_setup_and_unload_logging(
 
 
 @pytest.mark.asyncio
-async def test_config_flow_window_setup_logging(
+async def test_config_flow_window_setup_happy_logging(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
     """[Happy] Window setup config flow logs user_input show form."""
@@ -117,7 +117,7 @@ async def test_config_flow_window_setup_logging(
 
 
 @pytest.mark.asyncio
-async def test_options_flow_save_logging(
+async def test_options_flow_save_happy_logging(
     hass: HomeAssistant,
     mock_legacy_config_entry: ConfigEntry,
     caplog: pytest.LogCaptureFixture,
@@ -151,7 +151,6 @@ async def test_options_flow_save_logging(
             result["flow_id"],
             {
                 CONF_SOURCE_ENTITY: "sensor.today_import",
-                CONF_NAME: "Import",
                 "remove_previous_entities": True,
             },
         )
@@ -166,7 +165,7 @@ async def test_options_flow_save_logging(
 
 
 @pytest.mark.asyncio
-async def test_sensor_setup_and_load_logging(
+async def test_sensor_setup_and_load_happy_logging(
     hass: HomeAssistant,
     mock_legacy_config_entry: ConfigEntry,
     caplog: pytest.LogCaptureFixture,
@@ -190,7 +189,7 @@ async def test_sensor_setup_and_load_logging(
 
 
 @pytest.mark.asyncio
-async def test_sensor_get_source_value_non_numeric_logging(
+async def test_sensor_get_source_value_unhappy_non_numeric_logging(
     hass: HomeAssistant,
     mock_legacy_config_entry: ConfigEntry,
     caplog: pytest.LogCaptureFixture,
@@ -214,7 +213,7 @@ async def test_sensor_get_source_value_non_numeric_logging(
 
 
 @pytest.mark.asyncio
-async def test_sensor_midnight_reset_logging(
+async def test_sensor_midnight_reset_happy_logging(
     hass: HomeAssistant,
     mock_legacy_config_entry: ConfigEntry,
     caplog: pytest.LogCaptureFixture,
@@ -246,7 +245,7 @@ async def test_sensor_midnight_reset_logging(
 
 
 @pytest.mark.asyncio
-async def test_sensor_save_logging(
+async def test_sensor_save_happy_logging(
     hass: HomeAssistant,
     mock_legacy_config_entry: ConfigEntry,
     caplog: pytest.LogCaptureFixture,
@@ -285,7 +284,7 @@ async def test_sensor_save_logging(
 
 
 @pytest.mark.asyncio
-async def test_sensor_cost_calc_fail_logging(
+async def test_sensor_cost_calc_unhappy_fail_logging(
     hass: HomeAssistant,
     caplog: pytest.LogCaptureFixture,
 ) -> None:

@@ -132,6 +132,77 @@ async def test_window_setup_invalid_time_value_shows_invalid_time(
 
 
 @pytest.mark.asyncio
+async def test_window_setup_happy_seconds_are_persisted_as_hhmmss(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Seconds are accepted and stored in HH:MM:SS format."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            "cost_per_kwh": 0.2,
+            "start_1": "09:00:05",
+            "end_1": "12:00:10",
+        },
+    )
+    assert result["step_id"] == "window_entities"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {"entities": ["sensor.today_load"]},
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "window_entities_confirm"
+
+    entries = hass.config_entries.async_entries(DOMAIN)
+    assert len(entries) == 1
+    windows = entries[0].data.get(CONF_WINDOWS) or []
+    assert windows
+    ranges = windows[0].get(CONF_RANGES) or []
+    assert ranges
+    assert ranges[0][CONF_WINDOW_START] == "09:00:05"
+    assert ranges[0][CONF_WINDOW_END] == "12:00:10"
+
+
+@pytest.mark.asyncio
+async def test_window_setup_unhappy_seconds_overlap_rejected(
+    hass: HomeAssistant,
+) -> None:
+    """[Unhappy] Overlap by seconds is rejected in multi-range validation."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            "cost_per_kwh": 0.2,
+            "start_1": "09:00:00",
+            "end_1": "12:00:30",
+            "add_another": True,
+        },
+    )
+    assert result["step_id"] == "window_setup"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            "cost_per_kwh": 0.2,
+            "start_1": "09:00:00",
+            "end_1": "12:00:30",
+            "start_2": "12:00:00",
+            "end_2": "13:00:00",
+        },
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result.get("errors", {}).get("base") == "range_start_before_previous_end"
+
+
+@pytest.mark.asyncio
 async def test_options_add_window_start_ge_end_rejected(hass: HomeAssistant, mock_legacy_config_entry) -> None:
     """[Unhappy] options add_window: start >= end shows window_start_after_end."""
     hass.states.async_set("sensor.today_load", "0")
