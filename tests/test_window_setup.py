@@ -85,3 +85,60 @@ async def test_window_setup_happy_create_entry_and_sensor(hass: HomeAssistant) -
     assert options_result["type"] is data_entry_flow.FlowResultType.MENU
     assert options_result["step_id"] == "init"
 
+
+@pytest.mark.asyncio
+async def test_window_setup_happy_clear_extra_placeholder_range_slot_deletes_it(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Clearing an extra range slot should not persist a placeholder range."""
+    hass.states.async_set("sensor.today_load", "12.0")
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "window_setup"
+
+    # Add another range slot.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            "cost_per_kwh": 0.2,
+            "start_1": "09:00:00",
+            "end_1": "11:00:00",
+            "add_another": True,
+        },
+    )
+    assert result["step_id"] == "window_setup"
+
+    # Clear the extra placeholder range slot by submitting empty start/end.
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            "cost_per_kwh": 0.2,
+            "start_1": "09:00:00",
+            "end_1": "11:00:00",
+            "start_2": "",
+            "end_2": "",
+        },
+    )
+    assert result["step_id"] == "window_entities"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"entities": ["sensor.today_load"]}
+    )
+    await hass.async_block_till_done()
+    assert result["step_id"] == "window_entities_confirm"
+
+    entries = hass.config_entries.async_entries(DOMAIN)
+    assert len(entries) == 1
+    windows = entries[0].data.get("windows") or []
+    assert len(windows) == 1
+    assert windows[0]["name"] == "Peak"
+    assert windows[0]["entities"] == ["sensor.today_load"]
+    assert len(windows[0]["ranges"]) == 1
+    assert windows[0]["ranges"][0]["start"] == "09:00:00"
+    assert windows[0]["ranges"][0]["end"] == "11:00:00"
+

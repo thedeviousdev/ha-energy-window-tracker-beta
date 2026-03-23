@@ -7,7 +7,7 @@
 
 Energy Window Tracker (Beta) helps you track energy usage inside time windows you define. It reads a cumulative sensor (for example `sensor.today_load`), takes snapshots, and reports usage during and after each configured window.
 
-You can use multiple source entities, multiple ranges, and separate window names. The integration stores configured times as `HH:MM:SS`.
+You can use multiple source entities, multiple ranges. The integration stores configured times as `HH:MM:SS`.
 
 ## Requirements
 
@@ -47,6 +47,7 @@ Saving changes shows a success confirmation and returns you to the configure men
 - Validation enforces chronological ranges, including seconds precision.
 - If all ranges for a window are removed in the edit flow, that window is removed.
 - The integration entry title is derived from the first configured window name and updates when you rename the window in the edit flow.
+- The integration interprets window times using Home Assistant's configured local timezone.
 
 ## Contributing
 
@@ -57,6 +58,10 @@ For testing and development workflows, see `CONTRIBUTING.md`.
 If UI labels appear as raw keys, restart Home Assistant to refresh translation cache.
 
 If source values are not updating as expected, check that the entity exists, has a numeric state, is cumulative, and your ranges are valid/in order.
+
+### Home Assistant timezone
+Window logic uses your Home Assistant instance timezone.
+You can check it in Home Assistant under `Settings -> System -> General`.
 
 For bugs and feature requests, use:
 

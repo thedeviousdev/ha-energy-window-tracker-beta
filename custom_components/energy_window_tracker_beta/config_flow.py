@@ -66,6 +66,17 @@ _RE_HHMMSS = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$")
 _TIME_SELECTOR = selector.TimeSelector()
 
 
+def _time_selector_allow_empty(value: Any) -> Any:
+    """Allow empty/None values for optional time slots.
+
+    When enabled, placeholder range slots can be cleared by the user and will be ignored
+    during range collection (they won't satisfy start < end).
+    """
+    if value in (None, "", [], {}):
+        return None
+    return _TIME_SELECTOR(value)
+
+
 def _is_valid_time_value(time_value: Any) -> bool:
     """Return True if value looks like a valid time input (HH:MM[:SS] string or dict)."""
     try:
@@ -98,9 +109,11 @@ def _validate_time_fields(data: dict[str, Any], num_ranges: int) -> dict[str, st
     errors: dict[str, str] = {}
     keys = [(f"start_{i}", f"end_{i}") for i in range(1, num_ranges + 1)]
     for sk, ek in keys:
-        if sk in data and not _is_valid_time_value(data.get(sk)):
+        sk_val = data.get(sk)
+        if sk in data and sk_val not in (None, "", [] , {} ) and not _is_valid_time_value(sk_val):
             errors[sk] = "invalid_time"
-        if ek in data and not _is_valid_time_value(data.get(ek)):
+        ek_val = data.get(ek)
+        if ek in data and ek_val not in (None, "", [] , {} ) and not _is_valid_time_value(ek_val):
             errors[ek] = "invalid_time"
     return errors
 
@@ -316,6 +329,7 @@ def _build_single_window_multi_range_schema(
     include_delete: bool = False,
     include_range_delete: bool = False,
     num_slots: int | None = None,
+    allow_empty_slots: bool = False,
 ) -> vol.Schema:
     """Build schema: one window name, one cost, then start/end for start_1/end_1, start_2/end_2, ...
     Labels: "Start time #1", "End time #1", "Start time #2", etc. (built in _get_window_form_labels).
@@ -342,16 +356,24 @@ def _build_single_window_multi_range_schema(
         idx = i + 1
         sk, ek = f"start_{idx}", f"end_{idx}"
         r = ranges[i] if i < len(ranges) else {}
-        s_def = _time_to_str(r.get("start") or DEFAULT_WINDOW_START)
-        e_def = _time_to_str(r.get("end") or DEFAULT_WINDOW_END)
+        if i < len(ranges):
+            s_def = _time_to_str(r.get("start") or DEFAULT_WINDOW_START)
+            e_def = _time_to_str(r.get("end") or DEFAULT_WINDOW_END)
+        else:
+            # Placeholder slots should be truly empty when allow_empty_slots is enabled.
+            # That way, clearing an "extra" range does not accidentally keep a default range.
+            s_def = None if allow_empty_slots else _time_to_str(DEFAULT_WINDOW_START)
+            e_def = None if allow_empty_slots else _time_to_str(DEFAULT_WINDOW_END)
         start_desc = labels.get(sk) or "Start time"
         end_desc = labels.get(ek) or "End time"
+        start_validator = _time_selector_allow_empty if allow_empty_slots else _TIME_SELECTOR
+        end_validator = _time_selector_allow_empty if allow_empty_slots else _TIME_SELECTOR
         schema_dict[
             vol.Optional(sk, default=s_def, description=start_desc)
-        ] = _TIME_SELECTOR
+        ] = start_validator
         schema_dict[
             vol.Optional(ek, default=e_def, description=end_desc)
-        ] = _TIME_SELECTOR
+        ] = end_validator
         if include_range_delete:
             schema_dict[
                 vol.Optional(f"delete_range_{idx}", default=False)
@@ -512,6 +534,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
                 )
                 return self.async_show_form(
                     step_id="window_setup", data_schema=schema, errors=time_errors
@@ -535,6 +558,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     include_add_another=True,
                     include_delete=False,
                     num_slots=n_collect,
+                    allow_empty_slots=True,
                 )
                 return self.async_show_form(
                     step_id="window_setup", data_schema=schema, errors=errors
@@ -553,6 +577,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     include_add_another=True,
                     include_delete=False,
                     num_slots=len(self._setup_ranges) + 1,
+                    allow_empty_slots=True,
                 )
                 return self.async_show_form(
                     step_id="window_setup", data_schema=schema, errors={}
@@ -568,6 +593,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             include_add_another=True,
             include_delete=False,
             num_slots=num_ranges,
+            allow_empty_slots=True,
         )
         return self.async_show_form(step_id="window_setup", data_schema=schema, errors=errors)
 
@@ -2097,7 +2123,8 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     ranges_for_form,
                     include_add_another=True,
                     include_delete=False,
-                    include_range_delete=True,
+                    include_range_delete=False,
+                    allow_empty_slots=True,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(step_id="edit_window", data_schema=schema, errors=time_errors)
@@ -2128,7 +2155,8 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     err_labels, None, w_name or "", cost_val,
                     ranges_for_form,
                     include_add_another=True, include_delete=False,
-                    include_range_delete=True,
+                    include_range_delete=False,
+                    allow_empty_slots=True,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(step_id="edit_window", data_schema=schema, errors={"base": range_error})
@@ -2145,7 +2173,8 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 labels = await _get_window_form_labels(self.hass, "options", "edit_window", num_ranges=num_ranges)
                 schema = _build_single_window_multi_range_schema(
                     labels, None, self._pending_add_name, self._pending_add_cost, self._pending_add_ranges,
-                    include_add_another=True, include_delete=False, include_range_delete=True,
+                    include_add_another=True, include_delete=False, include_range_delete=False,
+                    allow_empty_slots=True,
                     num_slots=num_ranges,
                 )
                 return self.async_show_form(step_id="edit_window", data_schema=schema)
@@ -2169,7 +2198,8 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
         _MAIN_LOGGER.warning("options flow: showing form step_id=edit_window")
         schema = _build_single_window_multi_range_schema(
             labels, None, edit_name, cost, ranges_data, include_add_another=True, include_delete=False,
-            include_range_delete=True,
+            include_range_delete=False,
+            allow_empty_slots=True,
             num_slots=num_ranges,
         )
         return self.async_show_form(step_id="edit_window", data_schema=schema)
