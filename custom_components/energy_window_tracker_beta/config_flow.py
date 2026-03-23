@@ -1957,15 +1957,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 edit_name,
                 bool(user_input.get("add_another")),
             )
-            if user_input.get("delete_this_window"):
-                _MAIN_LOGGER.warning("options: edit_window - deleting window %r", edit_name)
-                _MAIN_LOGGER.warning("options flow step edit_window: user chose delete_this_window")
-                self._delete_index = -1
-                raw_to_remove = (same_name[0].get(CONF_WINDOW_NAME) or "").strip()
-                new_windows = [w for w in windows if (w.get(CONF_WINDOW_NAME) or "").strip() != raw_to_remove]
-                current_name = src.get(CONF_NAME) or None
-                options_to_persist = await self._save_source(source_entity, new_windows, source_name=current_name)
-                return self._async_create_options_entry(options_to_persist)
             # After "Add another time range" the form has more slots; use that count when collecting
             num_ranges_for_collect = (
                 len(self._pending_add_ranges) + 1 if self._pending_add_ranges else max(num_ranges, 1)
@@ -1995,7 +1986,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     _parse_cost(user_input.get(CONF_COST_PER_KWH)),
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=True,
+                    include_delete=False,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(step_id="edit_window", data_schema=schema, errors=time_errors)
@@ -2003,30 +1994,19 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 user_input, num_ranges_for_collect
             )
             if not ranges_list:
-                first_start = _time_to_str(user_input.get("start_1") or "00:00")
-                first_end = _time_to_str(user_input.get("end_1") or "00:00")
-                err = "window_start_after_end" if first_start >= first_end else "at_least_one_window"
-                ranges_for_form = [
-                    {
-                        "start": user_input.get("start_1") or "00:00",
-                        "end": user_input.get("end_1") or "00:00",
-                    }
+                # If the user clears all ranges (start >= end for every slot),
+                # treat it as removing the entire window.
+                raw_to_remove = (same_name[0].get(CONF_WINDOW_NAME) or "").strip()
+                new_windows = [
+                    w
+                    for w in windows
+                    if (w.get(CONF_WINDOW_NAME) or "").strip() != raw_to_remove
                 ]
-                for i in range(1, num_ranges_for_collect):
-                    ranges_for_form.append({
-                        "start": user_input.get(f"start_{i + 1}") or "00:00",
-                        "end": user_input.get(f"end_{i + 1}") or "00:00",
-                    })
-                err_labels = await _get_window_form_labels(
-                    self.hass, "options", "edit_window", num_ranges=num_ranges_for_collect
+                current_name = src.get(CONF_NAME) or None
+                options_to_persist = await self._save_source(
+                    source_entity, new_windows, source_name=current_name
                 )
-                schema = _build_single_window_multi_range_schema(
-                    err_labels, None, w_name or "", cost_val,
-                    ranges_for_form,
-                    include_add_another=True, include_delete=True,
-                    num_slots=num_ranges_for_collect,
-                )
-                return self.async_show_form(step_id="edit_window", data_schema=schema, errors={"base": err})
+                return self._async_create_options_entry(options_to_persist)
             range_error = _validate_ranges_chronological(ranges_list)
             if range_error:
                 ranges_for_form = [
@@ -2046,7 +2026,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 schema = _build_single_window_multi_range_schema(
                     err_labels, None, w_name or "", cost_val,
                     ranges_for_form,
-                    include_add_another=True, include_delete=True,
+                    include_add_another=True, include_delete=False,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(step_id="edit_window", data_schema=schema, errors={"base": range_error})
@@ -2063,7 +2043,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 labels = await _get_window_form_labels(self.hass, "options", "edit_window", num_ranges=num_ranges)
                 schema = _build_single_window_multi_range_schema(
                     labels, None, self._pending_add_name, self._pending_add_cost, self._pending_add_ranges,
-                    include_add_another=True, include_delete=True,
+                    include_add_another=True, include_delete=False,
                     num_slots=num_ranges,
                 )
                 return self.async_show_form(step_id="edit_window", data_schema=schema)
@@ -2086,7 +2066,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
 
         _MAIN_LOGGER.warning("options flow: showing form step_id=edit_window")
         schema = _build_single_window_multi_range_schema(
-            labels, None, edit_name, cost, ranges_data, include_add_another=True, include_delete=True,
+            labels, None, edit_name, cost, ranges_data, include_add_another=True, include_delete=False,
             num_slots=num_ranges,
         )
         return self.async_show_form(step_id="edit_window", data_schema=schema)

@@ -70,6 +70,7 @@
       },
       "edit_window": {
         "title": "Edit window",
+        "description": "To remove a time range, set its start time equal to or later than its end time. If you clear all ranges, the window will be removed.",
         "data": {
           "window_name": "Window name",
           "cost_per_kwh": "Cost per kWh ($)",
@@ -252,8 +253,7 @@
           "end_9": "End time #9",
           "start_10": "Start time #10",
           "end_10": "End time #10",
-          "add_another": "Add another time range",
-          "delete_this_window": "❌ Delete?"
+          "add_another": "Add another time range"
         },
         "submit": "Save"
       }
