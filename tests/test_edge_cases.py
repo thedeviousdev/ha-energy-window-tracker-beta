@@ -244,15 +244,7 @@ async def test_options_manage_windows_unique_names_only(hass: HomeAssistant) -> 
     result = await hass.config_entries.options.async_configure(
         opts["flow_id"], {"next_step_id": "list_windows"}
     )
-    # manage_windows is the actual list form
-    assert result["step_id"] in ("manage_windows", "manage_windows_empty")
-
-    if result["step_id"] == "manage_windows":
-        # Select option 1 (should be Off-Peak if list is [Peak, Off-Peak])
-        result = await hass.config_entries.options.async_configure(
-            result["flow_id"], {"window_index": "1"}
-        )
-        assert result["step_id"] == "edit_window"
+    assert result["step_id"] in ("edit_window", "manage_windows_empty")
 
 
 def test_translation_contains_required_start_end_keys() -> None:
@@ -277,7 +269,7 @@ def test_translation_contains_required_start_end_keys() -> None:
 async def test_window_form_labels_built_from_start_time_end_time_window_setup(
     hass: HomeAssistant,
 ) -> None:
-    """[Happy] _get_window_form_labels builds "1 - Start time" strings for window_setup."""
+    """[Happy] _get_window_form_labels builds "Start time #N" strings for window_setup."""
     from custom_components.energy_window_tracker_beta.config_flow import (
         _data_key,
         _get_window_form_labels,
@@ -295,12 +287,12 @@ async def test_window_form_labels_built_from_start_time_end_time_window_setup(
     ):
         labels = await _get_window_form_labels(hass, "config", step_id, num_ranges=3)
 
-    assert labels["start_1"] == "1 - Start time"
-    assert labels["end_1"] == "1 - End time"
-    assert labels["start_2"] == "2 - Start time"
-    assert labels["end_2"] == "2 - End time"
-    assert labels["start_3"] == "3 - Start time"
-    assert labels["end_3"] == "3 - End time"
+    assert labels["start_1"] == "Start time #1"
+    assert labels["end_1"] == "End time #1"
+    assert labels["start_2"] == "Start time #2"
+    assert labels["end_2"] == "End time #2"
+    assert labels["start_3"] == "Start time #3"
+    assert labels["end_3"] == "End time #3"
 
 
 @pytest.mark.asyncio
