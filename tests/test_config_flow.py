@@ -690,3 +690,97 @@ async def test_window_setup_happy_same_name_with_multiple_entities_has_no_errors
     assert result["type"] is data_entry_flow.FlowResultType.FORM
     assert result["step_id"] == "window_entities_confirm"
     assert result.get("errors") in ({}, None)
+
+
+@pytest.mark.asyncio
+async def test_window_entities_happy_multiple_entities_creates_entry_and_sensors(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Selecting multiple entities on initial create completes successfully."""
+    entity_ids = [
+        "sensor.today_load",
+        "sensor.today_battery_charge",
+        "sensor.today_battery_discharge",
+        "sensor.today_energy_export",
+        "sensor.today_energy_import",
+        "sensor.today_s_pv_generation",
+    ]
+    for eid in entity_ids:
+        hass.states.async_set(eid, "1.0")
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            "cost_per_kwh": 0.2,
+            "start_1": "09:00:00",
+            "end_1": "11:00:00",
+        },
+    )
+    assert result["step_id"] == "window_entities"
+
+    with patch(
+        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+        new_callable=AsyncMock,
+        return_value={},
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"],
+            {"entities": entity_ids},
+        )
+        await hass.async_block_till_done()
+
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "window_entities_confirm"
+
+    entries = hass.config_entries.async_entries(DOMAIN)
+    assert len(entries) >= 1
+
+    # One tracker sensor per selected entity.
+    from homeassistant.helpers import entity_registry as er
+
+    entry = entries[0]
+    registry = er.async_get(hass)
+    sensors = [
+        e
+        for e in registry.entities.get_entries_for_config_entry_id(entry.entry_id)
+        if e.domain == "sensor"
+    ]
+    assert len(sensors) == len(entity_ids)
+
+
+@pytest.mark.asyncio
+async def test_window_entities_unhappy_setup_failed_shows_error(
+    hass: HomeAssistant,
+) -> None:
+    """[Unhappy] If async_add fails, the flow returns window_entities with setup_failed."""
+    hass.states.async_set("sensor.today_load", "1.0")
+    entity_ids = ["sensor.today_load"]
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            "cost_per_kwh": 0.2,
+            "start_1": "09:00:00",
+            "end_1": "11:00:00",
+        },
+    )
+    assert result["step_id"] == "window_entities"
+
+    with patch.object(
+        hass.config_entries, "async_add", side_effect=RuntimeError("boom")
+    ):
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"entities": entity_ids}
+        )
+
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "window_entities"
+    assert result.get("errors", {}).get("base") == "setup_failed"
