@@ -260,7 +260,6 @@ async def test_options_edit_window_happy_preserves_other_sources(
             CONF_COST_PER_KWH: 0.25,
             "start_1": "09:00",
             "end_1": "12:00",
-            "delete_range_1": False,
         },
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
@@ -446,13 +445,10 @@ async def test_options_edit_window_happy_delete_middle_range_preserves_flow(
             CONF_COST_PER_KWH: 0.2,
             "start_1": "09:00",
             "end_1": "10:00",
-            "delete_range_1": False,
             "start_2": "11:00",
-            "end_2": "12:00",
-            "delete_range_2": True,
+            "end_2": "",
             "start_3": "13:00",
             "end_3": "14:00",
-            "delete_range_3": False,
         },
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
@@ -511,8 +507,7 @@ async def test_options_edit_window_unhappy_delete_all_ranges_requires_confirmati
             "window_name": "Peak",
             CONF_COST_PER_KWH: 0.2,
             "start_1": "09:00",
-            "end_1": "10:00",
-            "delete_range_1": True,
+            "end_1": "",
         },
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
@@ -560,8 +555,7 @@ async def test_options_edit_window_happy_delete_all_ranges_after_confirmation(
             "window_name": "Peak",
             CONF_COST_PER_KWH: 0.2,
             "start_1": "09:00",
-            "end_1": "10:00",
-            "delete_range_1": True,
+            "end_1": "",
         },
     )
     assert result["step_id"] == "confirm_delete_window"
@@ -618,7 +612,6 @@ async def test_options_edit_window_happy_renaming_updates_entry_title(
             CONF_COST_PER_KWH: 0.2,
             "start_1": "09:00",
             "end_1": "11:00",
-            "delete_range_1": False,
         },
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM

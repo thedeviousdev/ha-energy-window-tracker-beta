@@ -234,22 +234,13 @@
           "end_9": "End time #9",
           "start_10": "Start time #10",
           "end_10": "End time #10",
-          "delete_range_1": "❌ Delete?",
-          "delete_range_2": "❌ Delete?",
-          "delete_range_3": "❌ Delete?",
-          "delete_range_4": "❌ Delete?",
-          "delete_range_5": "❌ Delete?",
-          "delete_range_6": "❌ Delete?",
-          "delete_range_7": "❌ Delete?",
-          "delete_range_8": "❌ Delete?",
-          "delete_range_9": "❌ Delete?",
-          "delete_range_10": "❌ Delete?",
           "add_another": "Add another time range"
         },
         "submit": "Save"
       },
       "edit_window": {
         "title": "Edit window",
+        "description": "Clear a start or end time to remove that range. If all ranges are removed, the window will be deleted after confirmation.",
         "data": {
           "window_name": "Window name",
           "cost_per_kwh": "Cost per kWh ($)",
