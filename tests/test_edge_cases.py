@@ -57,13 +57,13 @@ def _state_for_entry(hass: HomeAssistant, entry_id: str):
     return hass.states.get(sensors[0].entity_id)
 
 
-def _window_first_entry(
+def _windows_based_entry(
     *,
     entry_id: str,
     window_groups: list[dict],
     title: str = "WF",
 ) -> MockConfigEntry:
-    """Create a window-first entry."""
+    """Create a windows-based entry."""
     return MockConfigEntry(
         domain=DOMAIN,
         title=title,
@@ -74,13 +74,15 @@ def _window_first_entry(
 
 
 @pytest.mark.asyncio
-async def test_wf_window_start_ge_end_rejected_errors_base(hass: HomeAssistant) -> None:
-    """[Unhappy] wf_window with start >= end yields at_least_one_window."""
+async def test_window_setup_start_ge_end_rejected_errors_base(
+    hass: HomeAssistant,
+) -> None:
+    """[Unhappy] window_setup with start >= end yields at_least_one_window."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "wf_window"
+    assert result["step_id"] == "window_setup"
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -93,15 +95,15 @@ async def test_wf_window_start_ge_end_rejected_errors_base(hass: HomeAssistant) 
     )
 
     assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "wf_window"
+    assert result["step_id"] == "window_setup"
     assert result.get("errors", {}).get("base") == "at_least_one_window"
 
 
 @pytest.mark.asyncio
-async def test_wf_window_invalid_time_value_shows_invalid_time(
+async def test_window_setup_invalid_time_value_shows_invalid_time(
     hass: HomeAssistant,
 ) -> None:
-    """[Unhappy] wf_window invalid time string shows invalid_time (or schema rejects)."""
+    """[Unhappy] window_setup invalid time string shows invalid_time (or schema rejects)."""
     from homeassistant.data_entry_flow import InvalidData
 
     result = await hass.config_entries.flow.async_init(
@@ -258,7 +260,7 @@ def test_translation_contains_required_start_end_keys() -> None:
     strings = __import__("json").loads(
         Path("custom_components/energy_window_tracker_beta/strings.json").read_text()
     )
-    for step in ("windows", "add_window", "edit_window", "wf_window"):
+    for step in ("windows", "add_window", "edit_window", "window_setup"):
         if step == "windows" and "windows" not in strings["config"]["step"]:
             continue
         if step in strings["config"]["step"]:
@@ -272,14 +274,16 @@ def test_translation_contains_required_start_end_keys() -> None:
 
 
 @pytest.mark.asyncio
-async def test_window_form_labels_built_from_start_time_end_time_wf_window(hass: HomeAssistant) -> None:
-    """[Happy] _get_window_form_labels builds "1 - Start time" strings for wf_window."""
+async def test_window_form_labels_built_from_start_time_end_time_window_setup(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] _get_window_form_labels builds "1 - Start time" strings for window_setup."""
     from custom_components.energy_window_tracker_beta.config_flow import (
         _data_key,
         _get_window_form_labels,
     )
 
-    step_id = "wf_window"
+    step_id = "window_setup"
     trans = {
         _data_key(step_id, "start_time"): "Start time",
         _data_key(step_id, "end_time"): "End time",
@@ -302,7 +306,7 @@ async def test_window_form_labels_built_from_start_time_end_time_wf_window(hass:
 @pytest.mark.asyncio
 async def test_sensor_same_day_snapshot_used_during_window(hass: HomeAssistant) -> None:
     """[Happy] Same-day stored snapshot_start is used for during_window value."""
-    entry = _window_first_entry(
+    entry = _windows_based_entry(
         entry_id="snap_same_day_id",
         window_groups=[
             {
@@ -345,7 +349,7 @@ async def test_sensor_stale_snapshot_discarded_when_late_snapshot_disabled(
     hass: HomeAssistant,
 ) -> None:
     """[Unhappy] Stale snapshot_date cleared; during_window shows 0 (no snapshot)."""
-    entry = _window_first_entry(
+    entry = _windows_based_entry(
         entry_id="snap_stale_id",
         window_groups=[
             {
@@ -390,7 +394,7 @@ async def test_sensor_stale_snapshot_discarded_when_late_snapshot_disabled(
 async def test_sensor_invalid_config_times_expose_config_warnings(hass: HomeAssistant) -> None:
     """[Unhappy] Invalid configured window times do not crash; config_warnings is exposed."""
     # Use the legacy CONF_SOURCES format so the invalid times are not filtered out
-    # by the window-first conversion's string start/end comparisons.
+    # by the windows-based conversion's string start/end comparisons.
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="invalid_times",
@@ -440,7 +444,7 @@ async def test_unique_ids_stable_when_window_groups_reordered(hass: HomeAssistan
     peak_uid = _stable_window_unique_id(entry_id, source_slug, "Peak")
     off_uid = _stable_window_unique_id(entry_id, source_slug, "Off-Peak")
 
-    entry = _window_first_entry(
+    entry = _windows_based_entry(
         entry_id=entry_id,
         window_groups=[
             {
@@ -507,7 +511,7 @@ async def test_unique_ids_only_change_for_renamed_window(hass: HomeAssistant) ->
     super_peak_uid = _stable_window_unique_id(entry_id, source_slug, "Super Peak")
     off_uid = _stable_window_unique_id(entry_id, source_slug, "Off-Peak")
 
-    entry = _window_first_entry(
+    entry = _windows_based_entry(
         entry_id=entry_id,
         window_groups=[
             {

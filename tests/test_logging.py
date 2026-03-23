@@ -98,10 +98,10 @@ async def test_setup_and_unload_logging(
 
 
 @pytest.mark.asyncio
-async def test_config_flow_window_first_logging(
+async def test_config_flow_window_setup_logging(
     hass: HomeAssistant, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """[Happy] Window-first config flow logs user_input show form."""
+    """[Happy] Window setup config flow logs user_input show form."""
     for logger_name in COMPONENT_LOGGERS:
         caplog.set_level(logging.DEBUG, logger=logger_name)
 
@@ -109,7 +109,7 @@ async def test_config_flow_window_first_logging(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "wf_window"
+    assert result["step_id"] == "window_setup"
 
     messages = _component_messages(caplog)
     assert "config flow step user: user_input=" in messages

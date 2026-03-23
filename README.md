@@ -1,6 +1,6 @@
 # Energy Window Tracker (Beta)
 
-Home Assistant custom integration for tracking energy usage by named time windows, with a window-first setup flow.
+Home Assistant custom integration for tracking energy usage by named time windows, with a windows-based setup flow.
 
 ## Install (manual)
 

@@ -1,4 +1,4 @@
-"""Tests for Energy Window Tracker Beta window-first setup."""
+"""Tests for Energy Window Tracker Beta window setup."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ from custom_components.energy_window_tracker_beta.const import DOMAIN
 
 
 @pytest.mark.asyncio
-async def test_beta_window_first_create_entry_and_sensor(hass: HomeAssistant) -> None:
+async def test_window_setup_create_entry_and_sensor(hass: HomeAssistant) -> None:
     """Window-first flow creates entry and corresponding sensor entity."""
     hass.states.async_set("sensor.today_load", "12.0")
 
@@ -20,7 +20,7 @@ async def test_beta_window_first_create_entry_and_sensor(hass: HomeAssistant) ->
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "wf_window"
+    assert result["step_id"] == "window_setup"
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -32,7 +32,7 @@ async def test_beta_window_first_create_entry_and_sensor(hass: HomeAssistant) ->
             "add_another": True,
         },
     )
-    assert result["step_id"] == "wf_window"
+    assert result["step_id"] == "window_setup"
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -45,14 +45,14 @@ async def test_beta_window_first_create_entry_and_sensor(hass: HomeAssistant) ->
             "end_2": "19:00",
         },
     )
-    assert result["step_id"] == "wf_entities"
+    assert result["step_id"] == "window_entities"
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"entities": ["sensor.today_load"]}
     )
     await hass.async_block_till_done()
     assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "wf_entities_confirm"
+    assert result["step_id"] == "window_entities_confirm"
 
     entries = hass.config_entries.async_entries(DOMAIN)
     assert len(entries) == 1
@@ -73,12 +73,12 @@ async def test_beta_window_first_create_entry_and_sensor(hass: HomeAssistant) ->
     ]
     assert len(entities) == 1
 
-    # Clicking "Edit" should take the user back to the wf_window form.
+    # Clicking "Edit" should take the user back to the window_setup form.
     edit_result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert edit_result["type"] is data_entry_flow.FlowResultType.FORM
-    assert edit_result["step_id"] == "wf_window"
+    assert edit_result["step_id"] == "window_setup"
 
-    # Options flow should also load for window-first entries.
+    # Options flow should also load for windows-based entries.
     # Historically this integration only supported the legacy CONF_SOURCES format in options.
     options_result = await hass.config_entries.options.async_init(entry_id)
     assert options_result["type"] is data_entry_flow.FlowResultType.MENU

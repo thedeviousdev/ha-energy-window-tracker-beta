@@ -103,7 +103,7 @@
           "delete_this_window": "❌ Delete?"
         }
       },
-      "wf_window": {
+      "window_setup": {
         "title": "Add window",
         "submit": "Add",
         "description": "Define a window and one or more time ranges.",
@@ -135,7 +135,7 @@
           "add_another": "Add another time range"
         }
       },
-      "wf_entities": {
+      "window_entities": {
         "title": "Select entities",
         "submit": "Add",
         "description": "Choose one or more entities to track in this window.",
@@ -143,7 +143,7 @@
           "entities": "Entities"
         }
       },
-      "wf_entities_confirm": {
+      "window_entities_confirm": {
         "title": "Window added",
         "submit": "Edit",
         "description": "Your window has been added. Click Edit to manage it."

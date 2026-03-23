@@ -23,17 +23,17 @@ from custom_components.energy_window_tracker_beta.const import (
 
 
 @pytest.mark.asyncio
-async def test_user_flow_starts_on_window_first_step(hass: HomeAssistant) -> None:
-    """[Happy] User flow starts directly on wf_window."""
+async def test_user_flow_starts_on_window_setup_step(hass: HomeAssistant) -> None:
+    """[Happy] User flow starts directly on window setup."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "wf_window"
+    assert result["step_id"] == "window_setup"
 
 
 @pytest.mark.asyncio
-async def test_wf_window_overlap_ranges_rejected(hass: HomeAssistant) -> None:
+async def test_window_setup_overlap_ranges_rejected(hass: HomeAssistant) -> None:
     """[Unhappy] Overlapping ranges show base error."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -48,7 +48,7 @@ async def test_wf_window_overlap_ranges_rejected(hass: HomeAssistant) -> None:
             "add_another": True,
         },
     )
-    assert result["step_id"] == "wf_window"
+    assert result["step_id"] == "window_setup"
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
@@ -66,8 +66,8 @@ async def test_wf_window_overlap_ranges_rejected(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_wf_entities_requires_at_least_one_entity(hass: HomeAssistant) -> None:
-    """[Unhappy] wf_entities validates empty selection."""
+async def test_window_entities_requires_at_least_one_entity(hass: HomeAssistant) -> None:
+    """[Unhappy] window_entities validates empty selection."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
@@ -80,23 +80,23 @@ async def test_wf_entities_requires_at_least_one_entity(hass: HomeAssistant) -> 
             "end_1": "12:00",
         },
     )
-    assert result["step_id"] == "wf_entities"
+    assert result["step_id"] == "window_entities"
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {"entities": []},
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "wf_entities"
+    assert result["step_id"] == "window_entities"
     assert result.get("errors", {}).get("base") == "source_entity_required"
 
 
 @pytest.mark.asyncio
-async def test_options_flow_opens_from_window_first_entry(
-    hass: HomeAssistant, mock_window_first_entry
+async def test_options_flow_opens_from_window_setup_entry(
+    hass: HomeAssistant, mock_window_setup_entry
 ) -> None:
-    """[Happy] Options flow loads for a window-first-created entry."""
-    result = await hass.config_entries.options.async_init(mock_window_first_entry.entry_id)
+    """[Happy] Options flow loads for a windows-based-created entry."""
+    result = await hass.config_entries.options.async_init(mock_window_setup_entry.entry_id)
     assert result["type"] is data_entry_flow.FlowResultType.MENU
     assert result["step_id"] == "init"
 

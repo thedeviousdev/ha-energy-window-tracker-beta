@@ -40,8 +40,8 @@ def _get_tracker_sensors(hass: HomeAssistant, entry_id: str) -> list:
     ]
 
 
-def test_get_sources_from_config_happy_window_first_conversion() -> None:
-    """[Happy] Window-first data converts into source rows grouped by entity."""
+def test_get_sources_from_config_happy_windows_based_conversion() -> None:
+    """[Happy] Windows-based data converts into source rows grouped by entity."""
     config = {
         CONF_WINDOWS: [
             {
@@ -64,7 +64,7 @@ def test_get_sources_from_config_happy_window_first_conversion() -> None:
 
 
 def test_get_sources_from_config_unhappy_invalid_ranges_filtered() -> None:
-    """[Unhappy] Invalid ranges are dropped during window-first conversion."""
+    """[Unhappy] Invalid ranges are dropped during windows-based conversion."""
     config = {
         CONF_WINDOWS: [
             {
@@ -102,19 +102,19 @@ def test_parse_windows_unhappy_invalid_time_uses_fallback_and_warning() -> None:
 
 
 @pytest.mark.asyncio
-async def test_sensor_setup_happy_window_first_entry_creates_sensor(
-    hass: HomeAssistant, mock_window_first_entry
+async def test_sensor_setup_happy_windows_based_entry_creates_sensor(
+    hass: HomeAssistant, mock_window_setup_entry
 ) -> None:
-    """[Happy] Sensor setup works with window-first entry data."""
+    """[Happy] Sensor setup works with windows-based entry data."""
     hass.states.async_set("sensor.today_load", "3.2")
     with patch(
         "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
         new_callable=AsyncMock,
         return_value={},
     ):
-        assert await hass.config_entries.async_setup(mock_window_first_entry.entry_id)
+        assert await hass.config_entries.async_setup(mock_window_setup_entry.entry_id)
         await hass.async_block_till_done()
-    entities = _get_tracker_sensors(hass, mock_window_first_entry.entry_id)
+    entities = _get_tracker_sensors(hass, mock_window_setup_entry.entry_id)
     assert len(entities) == 1
     state = hass.states.get(entities[0].entity_id)
     assert state is not None
@@ -124,7 +124,7 @@ async def test_sensor_setup_happy_window_first_entry_creates_sensor(
 
 @pytest.mark.asyncio
 async def test_sensor_setup_unhappy_source_unavailable(
-    hass: HomeAssistant, mock_window_first_entry
+    hass: HomeAssistant, mock_window_setup_entry
 ) -> None:
     """[Unhappy] Sensor still sets up and reports unavailable source state."""
     hass.states.async_set("sensor.today_load", "unavailable")
@@ -133,9 +133,9 @@ async def test_sensor_setup_unhappy_source_unavailable(
         new_callable=AsyncMock,
         return_value={},
     ):
-        assert await hass.config_entries.async_setup(mock_window_first_entry.entry_id)
+        assert await hass.config_entries.async_setup(mock_window_setup_entry.entry_id)
         await hass.async_block_till_done()
-    entities = _get_tracker_sensors(hass, mock_window_first_entry.entry_id)
+    entities = _get_tracker_sensors(hass, mock_window_setup_entry.entry_id)
     assert len(entities) == 1
     state = hass.states.get(entities[0].entity_id)
     assert state is not None

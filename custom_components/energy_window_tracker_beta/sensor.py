@@ -432,7 +432,7 @@ class WindowData:
 
 
 def _get_sources_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
-    """Return sources from either legacy source-first or window-first config."""
+    """Return sources from either legacy source-first or windows-based config."""
     raw = config.get(CONF_SOURCES)
     if isinstance(raw, list) and raw:
         return [raw[0]]  # Only first source; one entry = one source

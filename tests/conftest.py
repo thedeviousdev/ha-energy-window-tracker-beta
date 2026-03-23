@@ -58,8 +58,8 @@ def mock_legacy_config_entry(hass: HomeAssistant) -> ConfigEntry:
 
 
 @pytest.fixture
-def mock_window_first_entry(hass: HomeAssistant) -> ConfigEntry:
-    """Window-first shape (windows with entities + ranges) used in beta flow."""
+def mock_window_setup_entry(hass: HomeAssistant) -> ConfigEntry:
+    """Windows-based shape (windows with entities + ranges) used in beta flow."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="Energy Window Tracker (Beta)",
@@ -77,7 +77,7 @@ def mock_window_first_entry(hass: HomeAssistant) -> ConfigEntry:
             ]
         },
         options={},
-        entry_id="window_first_entry_id",
+        entry_id="window_setup_entry_id",
     )
     entry.add_to_hass(hass)
     return entry

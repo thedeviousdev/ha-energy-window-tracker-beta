@@ -460,11 +460,12 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._pending_add_name: str = ""
         self._pending_add_cost: float = 0.0
         self._pending_add_ranges: list[dict[str, str]] = []
-        self._wf_windows: list[dict[str, Any]] = []
-        self._wf_name: str = ""
-        self._wf_cost: float = 0.0
-        self._wf_ranges: list[dict[str, str]] = []
-        self._pending_wf_entry_id: str | None = None
+        # Setup state for the "windows-based" flow (define window ranges, then pick entities).
+        self._setup_windows: list[dict[str, Any]] = []
+        self._setup_name: str = ""
+        self._setup_cost: float = 0.0
+        self._setup_ranges: list[dict[str, str]] = []
+        self._pending_setup_entry_id: str | None = None
 
     def _get_pending_source(self) -> dict[str, Any]:
         """Get the single pending source (during initial flow before entry exists)."""
@@ -475,19 +476,19 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Step 1: window-first flow starts directly at window definition."""
+        """Step 1: start the windows-based setup flow at window definition."""
         _MAIN_LOGGER.warning(
             "config flow step user: user_input=%s",
             "submitted" if user_input is not None else "show form",
         )
-        return await self.async_step_wf_window(user_input)
+        return await self.async_step_window_setup(user_input)
 
-    async def async_step_wf_window(
+    async def async_step_window_setup(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Window-first setup: define a window and one or more ranges."""
+        """Windows-based setup: define a window and one or more ranges."""
         errors: dict[str, str] = {}
-        num_ranges = len(self._wf_ranges) + 1
+        num_ranges = len(self._setup_ranges) + 1
         labels = await _get_window_form_labels(self.hass, "config", "windows", num_ranges=num_ranges)
         if user_input is not None:
             time_errors = _validate_time_fields(user_input, num_ranges)
@@ -497,14 +498,16 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     None,
                     (user_input.get("window_name") or "").strip(),
                     _parse_cost(user_input.get(CONF_COST_PER_KWH)),
-                    self._wf_ranges,
+                    self._setup_ranges,
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
                 )
-                return self.async_show_form(step_id="wf_window", data_schema=schema, errors=time_errors)
+                return self.async_show_form(
+                    step_id="window_setup", data_schema=schema, errors=time_errors
+                )
 
-            n_collect = len(self._wf_ranges) + 1 if self._wf_ranges else max(num_ranges, 1)
+            n_collect = len(self._setup_ranges) + 1 if self._setup_ranges else max(num_ranges, 1)
             w_name, cost, ranges = _collect_ranges_from_single_window_form(user_input, n_collect)
             if not ranges:
                 errors["base"] = "at_least_one_window"
@@ -518,46 +521,50 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     None,
                     w_name or "",
                     cost,
-                    [{"start": s, "end": e} for s, e in ranges] or self._wf_ranges,
+                    [{"start": s, "end": e} for s, e in ranges] or self._setup_ranges,
                     include_add_another=True,
                     include_delete=False,
                     num_slots=n_collect,
                 )
-                return self.async_show_form(step_id="wf_window", data_schema=schema, errors=errors)
+                return self.async_show_form(
+                    step_id="window_setup", data_schema=schema, errors=errors
+                )
 
-            self._wf_name = w_name or ""
-            self._wf_cost = cost
-            self._wf_ranges = [{"start": s, "end": e} for s, e in ranges]
+            self._setup_name = w_name or ""
+            self._setup_cost = cost
+            self._setup_ranges = [{"start": s, "end": e} for s, e in ranges]
             if user_input.get("add_another"):
                 schema = _build_single_window_multi_range_schema(
                     labels,
                     None,
-                    self._wf_name,
-                    self._wf_cost,
-                    self._wf_ranges,
+                    self._setup_name,
+                    self._setup_cost,
+                    self._setup_ranges,
                     include_add_another=True,
                     include_delete=False,
-                    num_slots=len(self._wf_ranges) + 1,
+                    num_slots=len(self._setup_ranges) + 1,
                 )
-                return self.async_show_form(step_id="wf_window", data_schema=schema, errors={})
-            return await self.async_step_wf_entities()
+                return self.async_show_form(
+                    step_id="window_setup", data_schema=schema, errors={}
+                )
+            return await self.async_step_window_entities()
 
         schema = _build_single_window_multi_range_schema(
             labels,
             None,
-            self._wf_name,
-            self._wf_cost,
-            self._wf_ranges,
+            self._setup_name,
+            self._setup_cost,
+            self._setup_ranges,
             include_add_another=True,
             include_delete=False,
             num_slots=num_ranges,
         )
-        return self.async_show_form(step_id="wf_window", data_schema=schema, errors=errors)
+        return self.async_show_form(step_id="window_setup", data_schema=schema, errors=errors)
 
-    async def async_step_wf_entities(
+    async def async_step_window_entities(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Window-first setup: select entities assigned to this window and create entry."""
+        """Windows-based setup: select entities assigned to this window and create entry."""
         schema = vol.Schema(
             {
                 vol.Required(CONF_ENTITIES): selector.EntitySelector(
@@ -569,18 +576,18 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             entities = _normalize_entities_selector_value(user_input.get(CONF_ENTITIES))
             if not entities:
                 return self.async_show_form(
-                    step_id="wf_entities",
+                    step_id="window_entities",
                     data_schema=schema,
                     errors={"base": "source_entity_required"},
                 )
-            # Window-first setup defines exactly one window group for this flow.
+            # Windows-based setup defines exactly one window group for this flow.
             # If the user navigates back to edit, we should replace the payload
             # rather than accumulating duplicates.
-            self._wf_windows = [
+            self._setup_windows = [
                 {
-                    CONF_WINDOW_NAME: self._wf_name or None,
-                    CONF_COST_PER_KWH: self._wf_cost,
-                    CONF_RANGES: list(self._wf_ranges),
+                    CONF_WINDOW_NAME: self._setup_name or None,
+                    CONF_COST_PER_KWH: self._setup_cost,
+                    CONF_RANGES: list(self._setup_ranges),
                     CONF_ENTITIES: entities,
                 }
             ]
@@ -588,26 +595,26 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             # Use the configured window name as the config entry title so
             # it shows up in "Integration entries" as the actual window.
             entry_title = (
-                (self._wf_name or "").strip()
+                (self._setup_name or "").strip()
                 or (
-                    self._wf_windows[0].get(CONF_WINDOW_NAME)
-                    if self._wf_windows
+                    self._setup_windows[0].get(CONF_WINDOW_NAME)
+                    if self._setup_windows
                     else None
                 )
                 or defaults["entry_title"]
             )
             # If we already created an entry in this flow (e.g. after clicking "Edit"),
             # update it instead of creating a duplicate.
-            if self._pending_wf_entry_id:
-                existing = self.hass.config_entries.async_get_entry(self._pending_wf_entry_id)
+            if self._pending_setup_entry_id:
+                existing = self.hass.config_entries.async_get_entry(self._pending_setup_entry_id)
                 if existing:
                     await self.hass.config_entries.async_update_entry(
                         existing,
                         title=entry_title,
-                        data={CONF_WINDOWS: self._wf_windows},
+                        data={CONF_WINDOWS: self._setup_windows},
                     )
                     return self.async_show_form(
-                        step_id="wf_entities_confirm",
+                        step_id="window_entities_confirm",
                         data_schema=vol.Schema({}),
                         errors={},
                     )
@@ -619,31 +626,31 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 minor_version=0,
                 domain=DOMAIN,
                 title=entry_title,
-                data={CONF_WINDOWS: self._wf_windows},
+                data={CONF_WINDOWS: self._setup_windows},
                 source=config_entries.SOURCE_USER,
                 options={},
                 entry_id=uuid.uuid4().hex,
             )
             await self.hass.config_entries.async_add(entry)
-            self._pending_wf_entry_id = entry.entry_id
+            self._pending_setup_entry_id = entry.entry_id
             return self.async_show_form(
-                step_id="wf_entities_confirm",
+                step_id="window_entities_confirm",
                 data_schema=vol.Schema({}),
                 errors={},
             )
-        return self.async_show_form(step_id="wf_entities", data_schema=schema, errors={})
+        return self.async_show_form(step_id="window_entities", data_schema=schema, errors={})
 
-    async def async_step_wf_entities_confirm(
+    async def async_step_window_entities_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Confirmation after adding entities; send user to the options "Edit" screen."""
-        if not self._pending_wf_entry_id:
+        """Confirmation after adding entities; send user back to the window edit form."""
+        if not self._pending_setup_entry_id:
             # Should never happen, but keep the UX predictable.
             return await self.async_step_configure_menu(None)
         # Home Assistant does not support chaining a different flow type (options)
         # directly from within a config-flow step response. Return to the window
         # edit form in the same modal instead.
-        return await self.async_step_wf_window(None)
+        return await self.async_step_window_setup(None)
 
     async def async_step_windows(
         self, user_input: dict[str, Any] | None = None
