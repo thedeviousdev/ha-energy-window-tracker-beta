@@ -63,9 +63,7 @@ _MAIN_LOGGER = logging.getLogger("custom_components.energy_window_tracker_beta")
 # Only accept HH:MM or H:MM so schema defaults are always valid
 _RE_HHMM = re.compile(r"^(\d{1,2}):(\d{2})$")
 
-_TIME_TEXT_SELECTOR = selector.TextSelector(
-    selector.TextSelectorConfig(type="text", autocomplete="off")
-)
+_TIME_SELECTOR = selector.TimeSelector()
 
 
 def _is_valid_time_value(time_value: Any) -> bool:
@@ -283,7 +281,7 @@ async def _get_window_form_labels(
     num_ranges: int | None = None,
 ) -> dict[str, str]:
     """Load translated labels for the single-window form (one name, one cost, N start/end pairs).
-    Uses start_time and end_time from translations; builds labels as "{index} - Start time" etc.
+    Uses start_time and end_time from translations; builds labels as "{label} #{index}" etc.
     """
     lang = hass.config.language or "en"
     try:
@@ -299,8 +297,8 @@ async def _get_window_form_labels(
     end_time = trans.get(_data_key(step_id, "end_time")) or "End time"
     n_r = num_ranges if num_ranges is not None else 1
     for idx in range(1, n_r + 1):
-        labels[f"start_{idx}"] = f"{idx} - {start_time}"
-        labels[f"end_{idx}"] = f"{idx} - {end_time}"
+        labels[f"start_{idx}"] = f"{start_time} #{idx}"
+        labels[f"end_{idx}"] = f"{end_time} #{idx}"
     return labels
 
 
@@ -315,7 +313,7 @@ def _build_single_window_multi_range_schema(
     num_slots: int | None = None,
 ) -> vol.Schema:
     """Build schema: one window name, one cost, then start/end for start_1/end_1, start_2/end_2, ...
-    Labels: "1 - Start time", "1 - End time", "2 - Start time", etc. (built in _get_window_form_labels).
+    Labels: "Start time #1", "End time #1", "Start time #2", etc. (built in _get_window_form_labels).
     If num_slots is set, that many range slots are shown; otherwise max(1, len(ranges)).
     """
     schema_dict: dict[Any, Any] = {}
@@ -344,10 +342,10 @@ def _build_single_window_multi_range_schema(
         end_desc = labels.get(ek) or "End time"
         schema_dict[
             vol.Optional(sk, default=s_def, description=start_desc)
-        ] = _TIME_TEXT_SELECTOR
+        ] = _TIME_SELECTOR
         schema_dict[
             vol.Optional(ek, default=e_def, description=end_desc)
-        ] = _TIME_TEXT_SELECTOR
+        ] = _TIME_SELECTOR
     if include_add_another:
         schema_dict[
             vol.Optional("add_another", default=False, description=labels.get("add_another"))
@@ -1325,9 +1323,8 @@ def _entry_using_source_entity(
 def _build_init_menu_options() -> dict[str, str]:
     """Build main menu as step_id -> label (dict so labels show without translation lookup)."""
     return {
-        "add_window": "✚ Add new window",
-        "list_windows": "✏️ Manage windows",
-        "source_entity": "⚡️ Update energy source",
+        "list_windows": "✏️ Edit window",
+        "source_entity": "⚡️ Manage energy source(s)",
     }
 
 
@@ -1474,8 +1471,8 @@ def _build_single_window_schema(
             pass
     schema_dict: dict[Any, Any] = {
         vol.Optional(CONF_WINDOW_NAME, default=name_val): str,
-        vol.Optional("start", default=start_val): _TIME_TEXT_SELECTOR,
-        vol.Optional("end", default=end_val): _TIME_TEXT_SELECTOR,
+        vol.Optional("start", default=start_val): _TIME_SELECTOR,
+        vol.Optional("end", default=end_val): _TIME_SELECTOR,
         vol.Optional(
             CONF_COST_PER_KWH,
             default=cost_val,
@@ -1609,7 +1606,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
     async def _async_step_manage_windows_impl(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Show Manage windows: one option per unique window name; select then edit that name's ranges."""
+        """Show the window editor immediately (no intermediate "select window" step)."""
         _MAIN_LOGGER.warning(
             "options flow step manage_windows: user_input=%s",
             "submitted" if user_input is not None else "show list",
@@ -1624,23 +1621,18 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 step_id="manage_windows_empty",
                 data_schema=vol.Schema({}),
             )
-        if user_input is not None:
+        unique_names = _unique_window_names(windows)
+        idx = 0
+        if user_input is not None and "window_index" in user_input:
             raw = user_input.get("window_index")
             idx = int(raw[0] if isinstance(raw, list) else raw, 10)
-            unique_names = _unique_window_names(windows)
-            if 0 <= idx < len(unique_names):
-                self._edit_window_name = unique_names[idx]
-                _MAIN_LOGGER.warning("options flow step manage_windows: user selected window %r", self._edit_window_name)
-            return await self.async_step_edit_window(None)
-        unique_names = _unique_window_names(windows)
-        options = [{"value": str(i), "label": unique_names[i]} for i in range(len(unique_names))]
-        _MAIN_LOGGER.warning("options flow: showing form step_id=manage_windows (%s windows)", len(unique_names))
-        schema = vol.Schema({
-            vol.Required("window_index"): selector.SelectSelector(
-                selector.SelectSelectorConfig(options=options),
-            ),
-        })
-        return self.async_show_form(step_id="manage_windows", data_schema=schema)
+        idx = max(0, min(idx, len(unique_names) - 1))
+        self._edit_window_name = unique_names[idx]
+        _MAIN_LOGGER.warning(
+            "options flow: showing edit_window for %r (manage_windows shortcut)",
+            self._edit_window_name,
+        )
+        return await self.async_step_edit_window(None)
 
     async def async_step_list_windows(
         self, user_input: dict[str, Any] | None = None
