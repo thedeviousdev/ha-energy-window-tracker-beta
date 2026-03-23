@@ -60,8 +60,8 @@ from .const import (
 _MAIN_LOGGER = logging.getLogger("custom_components.energy_window_tracker_beta")
 
 
-# Only accept HH:MM or H:MM so schema defaults are always valid
-_RE_HHMM = re.compile(r"^(\d{1,2}):(\d{2})$")
+# Accept HH:MM[:SS] (hour can be 1-2 digits)
+_RE_HHMMSS = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$")
 
 _TIME_SELECTOR = selector.TimeSelector()
 
@@ -74,20 +74,21 @@ def _is_valid_time_value(time_value: Any) -> bool:
         if isinstance(time_value, dict):
             hour_value = time_value.get("hour", time_value.get("hours"))
             minute_value = time_value.get("minute", time_value.get("minutes"))
+            second_value = time_value.get("second", time_value.get("seconds", 0))
             if hour_value is None or minute_value is None:
                 return False
-            hour_int, minute_int = int(hour_value), int(minute_value)
-            return 0 <= hour_int <= 23 and 0 <= minute_int <= 59
+            hour_int, minute_int, second_int = int(hour_value), int(minute_value), int(second_value)
+            return 0 <= hour_int <= 23 and 0 <= minute_int <= 59 and 0 <= second_int <= 59
         time_str = str(time_value).strip()
         if not time_str:
             return False
-        if time_str.count(":") >= 2:
-            time_str = time_str.rsplit(":", 1)[0]
-        if not _RE_HHMM.match(time_str):
+        match = _RE_HHMMSS.match(time_str)
+        if not match:
             return False
-        hour_str, minute_str = time_str.split(":")
-        hour_int, minute_int = int(hour_str, 10), int(minute_str, 10)
-        return 0 <= hour_int <= 23 and 0 <= minute_int <= 59
+        hour_int = int(match.group(1), 10)
+        minute_int = int(match.group(2), 10)
+        second_int = int(match.group(3) or "0", 10)
+        return 0 <= hour_int <= 23 and 0 <= minute_int <= 59 and 0 <= second_int <= 59
     except (TypeError, ValueError):
         return False
 
@@ -105,40 +106,43 @@ def _validate_time_fields(data: dict[str, Any], num_ranges: int) -> dict[str, st
 
 
 def _time_to_str(t: Any) -> str:
-    """Convert time object or string to HH:MM format. Never raises. Invalid -> 00:00."""
+    """Convert time object or string to HH:MM:SS format. Never raises. Invalid -> 00:00:00."""
 
     def valid(s: str) -> str:
         s = (s or "").strip()
-        # Accept HH:MM:SS or HH:MM (e.g. frontend may send 09:00:00 or 9:00:00)
-        if s.count(":") >= 2:
-            s = s.rsplit(":", 1)[
-                0
-            ]  # drop seconds: "09:00:00" -> "09:00", "9:00:00" -> "9:00"
-        elif len(s) > 5:
-            s = s[:5]
-        if _RE_HHMM.match(s):
-            parts = s.split(":")
-            h, m = int(parts[0], 10), int(parts[1], 10)
-            if 0 <= h <= 23 and 0 <= m <= 59:
-                return f"{h:02d}:{m:02d}"
-        return "00:00"
+        match = _RE_HHMMSS.match(s)
+        if match:
+            h = int(match.group(1), 10)
+            m = int(match.group(2), 10)
+            sec = int(match.group(3) or "0", 10)
+            if 0 <= h <= 23 and 0 <= m <= 59 and 0 <= sec <= 59:
+                return f"{h:02d}:{m:02d}:{sec:02d}"
+        return "00:00:00"
 
     try:
         if t is None:
-            return "00:00"
+            return "00:00:00"
         if isinstance(t, str):
             return valid(t)
         if isinstance(t, dict):
             h = t.get("hour", t.get("hours", 0))
             m = t.get("minute", t.get("minutes", 0))
-            return f"{int(h) % 24:02d}:{int(m) % 60:02d}"
+            s = t.get("second", t.get("seconds", 0))
+            return f"{int(h) % 24:02d}:{int(m) % 60:02d}:{int(s) % 60:02d}"
         if hasattr(t, "strftime"):
-            return valid(t.strftime("%H:%M"))
-        if hasattr(t, "hour") and hasattr(t, "minute"):
-            return f"{int(t.hour):02d}:{int(t.minute):02d}"
+            return valid(t.strftime("%H:%M:%S"))
+        if hasattr(t, "hour") and hasattr(t, "minute") and hasattr(t, "second"):
+            return f"{int(t.hour):02d}:{int(t.minute):02d}:{int(t.second):02d}"
         return valid(str(t))
     except (TypeError, ValueError, AttributeError, KeyError):
-        return "00:00"
+        return "00:00:00"
+
+
+def _time_to_seconds(time_value: str) -> int:
+    """Convert HH:MM[:SS] to seconds since midnight."""
+    normalized = _time_to_str(time_value)
+    hour_str, minute_str, second_str = normalized.split(":")
+    return int(hour_str) * 3600 + int(minute_str) * 60 + int(second_str)
 
 
 def _normalize_entity_selector_value(value: Any) -> str:
@@ -350,7 +354,7 @@ def _build_single_window_multi_range_schema(
         ] = _TIME_SELECTOR
         if include_range_delete:
             schema_dict[
-                vol.Optional(f"delete_range_{idx}", default=False, description="Delete range")
+                vol.Optional(f"delete_range_{idx}", default=False)
             ] = bool
     if include_add_another:
         schema_dict[
@@ -385,7 +389,7 @@ def _validate_ranges_chronological(ranges: list[tuple[str, str]]) -> str | None:
     if len(ranges) <= 1:
         return None
     for i in range(1, len(ranges)):
-        if ranges[i][0] < ranges[i - 1][1]:
+        if _time_to_seconds(ranges[i][0]) < _time_to_seconds(ranges[i - 1][1]):
             return "range_start_before_previous_end"
     return None
 
@@ -570,7 +574,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_window_entities(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Windows-based setup: select entities assigned to this window and create entry."""
+        """Windows-based setup: one friendly-named window per selected entity."""
         schema = vol.Schema(
             {
                 vol.Required(CONF_ENTITIES): selector.EntitySelector(
@@ -586,18 +590,22 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data_schema=schema,
                     errors={"base": "source_entity_required"},
                 )
-            # Windows-based setup defines exactly one window group for this flow.
-            # If the user navigates back to edit, we should replace the payload
-            # rather than accumulating duplicates.
-            self._setup_windows = [
-                {
-                    CONF_WINDOW_NAME: self._setup_name or None,
-                    CONF_COST_PER_KWH: self._setup_cost,
-                    CONF_RANGES: list(self._setup_ranges),
-                    CONF_ENTITIES: entities,
-                }
-            ]
+            # Create one window per entity, all using the configured window name.
+            # Ranges remain plain start/end pairs and are shared for each selected entity.
             defaults = await _get_config_defaults(self.hass)
+            configured_window_name = (
+                (self._setup_name or "").strip() or defaults["window_name"]
+            )
+            self._setup_windows = []
+            for entity_id in entities:
+                self._setup_windows.append(
+                    {
+                        CONF_WINDOW_NAME: configured_window_name,
+                        CONF_COST_PER_KWH: self._setup_cost,
+                        CONF_RANGES: list(self._setup_ranges),
+                        CONF_ENTITIES: [entity_id],
+                    }
+                )
             # Use the configured window name as the config entry title so
             # it shows up in "Integration entries" as the actual window.
             entry_title = (
@@ -1199,9 +1207,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             new_entity = user_input.get(CONF_SOURCE_ENTITY) or ""
             if new_entity and self._pending_sources:
                 defaults = await _get_config_defaults(self.hass)
-                name = (user_input.get(CONF_NAME) or "").strip() or _get_entity_friendly_name(
-                    self.hass, new_entity, defaults["window_name"]
-                )
+                name = _get_entity_friendly_name(self.hass, new_entity, defaults["window_name"])
                 self._pending_sources[0][CONF_SOURCE_ENTITY] = new_entity
                 self._pending_sources[0][CONF_NAME] = (name or defaults["entry_title"]).strip()[:200]
                 if self._pending_entry_title:
@@ -1270,8 +1276,8 @@ def _get_sources_from_entry(entry: config_entries.ConfigEntry) -> list[dict[str,
         for r in ranges:
             if not isinstance(r, dict):
                 continue
-            start = str(r.get(CONF_WINDOW_START) or "").strip()
-            end = str(r.get(CONF_WINDOW_END) or "").strip()
+            start = _time_to_str(r.get(CONF_WINDOW_START))
+            end = _time_to_str(r.get(CONF_WINDOW_END))
             if not start or not end or start >= end:
                 continue
             range_rows.append(
@@ -1442,13 +1448,12 @@ def _build_source_entity_schema(
     current_source_name: str = "",
     include_remove_previous: bool = False,
 ) -> vol.Schema:
-    """Build schema for changing the source entity and optional source name."""
+    """Build schema for changing the source entity."""
     schema_dict: dict[Any, Any] = {
         vol.Required(
             CONF_SOURCE_ENTITY,
             default=source_entity or DEFAULT_SOURCE_ENTITY,
         ): selector.EntitySelector(selector.EntitySelectorConfig(domain="sensor")),
-        vol.Optional(CONF_NAME, default=current_source_name or ""): str,
     }
     if include_remove_previous:
         schema_dict[vol.Optional("remove_previous_entities", default=False)] = bool
@@ -1502,6 +1507,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
         self._edit_index: int = 0
         self._edit_window_name: str | None = None
         self._delete_index: int = -1
+        self._pending_delete_window_name: str | None = None
         self._pending_add_name: str = ""
         self._pending_add_cost: float = 0.0
         self._pending_add_ranges: list[dict[str, str]] = []
@@ -1518,6 +1524,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
         source_entity: str,
         windows: list[dict[str, Any]],
         source_name: str | None = None,
+        previous_source_entity: str | None = None,
     ) -> dict[str, Any]:
         """Build and return the new options dict. Do not update or reload here.
         Callers return this via _async_create_options_entry so the flow result
@@ -1532,8 +1539,27 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             CONF_SOURCE_ENTITY: source_entity,
             CONF_WINDOWS: windows,
         }
+        # Preserve existing sources and only update/insert the edited one.
+        existing_sources = _get_sources_from_entry(self._config_entry)
+        merged_sources: list[dict[str, Any]] = []
+        replaced = False
+        replace_entity = (previous_source_entity or source_entity).strip()
+        for src in existing_sources:
+            if not isinstance(src, dict):
+                continue
+            if str(src.get(CONF_SOURCE_ENTITY) or "").strip() == replace_entity:
+                merged_sources.append(new_source)
+                replaced = True
+            else:
+                merged_sources.append(src)
+        if not replaced:
+            if len(merged_sources) == 1:
+                # Backward-compatible behavior for single-source setups: replace.
+                merged_sources = [new_source]
+            else:
+                merged_sources.append(new_source)
         # Merge with existing options so we don't drop other keys (e.g. _retain_entity_unique_ids)
-        new_options = {**(self._config_entry.options or {}), CONF_SOURCES: [new_source]}
+        new_options = {**(self._config_entry.options or {}), CONF_SOURCES: merged_sources}
         _MAIN_LOGGER.warning(
             "options flow: built options entry_id=%s source_entity=%r windows=%s",
             self._config_entry.entry_id,
@@ -1544,7 +1570,22 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
 
     def _async_create_options_entry(self, options: dict[str, Any]) -> config_entries.FlowResult:
         """Persist options and show success form instead of closing the modal."""
-        self.hass.config_entries.async_update_entry(self._config_entry, options=options)
+        # Keep the integration entry title in sync with the first configured window name.
+        # HA displays `ConfigEntry.title` in "Integration entries".
+        new_title = self._config_entry.title
+        sources = options.get(CONF_SOURCES) if isinstance(options, dict) else None
+        if isinstance(sources, list) and sources and isinstance(sources[0], dict):
+            windows = sources[0].get(CONF_WINDOWS)
+            if isinstance(windows, list):
+                names = _unique_window_names(windows)
+                if names:
+                    new_title = names[0]
+
+        self.hass.config_entries.async_update_entry(
+            self._config_entry,
+            title=new_title,
+            options=options,
+        )
         _MAIN_LOGGER.warning(
             "options flow: options saved (entry_id=%s), showing success step",
             self._config_entry.entry_id,
@@ -1713,6 +1754,34 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
         """Redirect to source_entity form (no separate confirm step)."""
         return await self.async_step_source_entity(None)
 
+    async def async_step_confirm_delete_window(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Confirm deleting a window when all ranges were removed in edit flow."""
+        src = self._get_current_source()
+        source_entity = str(src.get(CONF_SOURCE_ENTITY) or DEFAULT_SOURCE_ENTITY)
+        windows = _normalize_windows_for_schema(src.get(CONF_WINDOWS) or [])
+        window_name = (self._pending_delete_window_name or "").strip()
+        if not window_name:
+            return await self.async_step_edit_window(None)
+
+        if user_input is not None:
+            new_windows = [
+                w for w in windows if (w.get(CONF_WINDOW_NAME) or "").strip() != window_name
+            ]
+            current_name = src.get(CONF_NAME) or None
+            options_to_persist = await self._save_source(
+                source_entity, new_windows, source_name=current_name
+            )
+            self._pending_delete_window_name = None
+            return self._async_create_options_entry(options_to_persist)
+
+        return self.async_show_form(
+            step_id="confirm_delete_window",
+            data_schema=vol.Schema({}),
+            description_placeholders={"window_name": window_name},
+        )
+
     async def async_step_source_entity(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
@@ -1764,8 +1833,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     ),
                     errors={"base": "remove_previous_but_source_unchanged"},
                 )
-            custom_name = (user_input.get(CONF_NAME) or "").strip()
-            source_name = custom_name or _get_entity_friendly_name(
+            source_name = _get_entity_friendly_name(
                 self.hass, new_entity, defaults["window_name"]
             )
 
@@ -1793,7 +1861,12 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             )
             await store.async_save({})
 
-            options_to_persist = await self._save_source(new_entity, windows, source_name=source_name)
+            options_to_persist = await self._save_source(
+                new_entity,
+                windows,
+                source_name=source_name,
+                previous_source_entity=source_entity,
+            )
             if getattr(self, "_retain_ids_after_save", None) is not None:
                 options_to_persist = {**options_to_persist, "_retain_entity_unique_ids": self._retain_ids_after_save}
                 del self._retain_ids_after_save
@@ -2008,19 +2081,9 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 user_input, num_ranges_for_collect
             )
             if not ranges_list:
-                # If the user clears all ranges (start >= end for every slot),
-                # treat it as removing the entire window.
                 raw_to_remove = (same_name[0].get(CONF_WINDOW_NAME) or "").strip()
-                new_windows = [
-                    w
-                    for w in windows
-                    if (w.get(CONF_WINDOW_NAME) or "").strip() != raw_to_remove
-                ]
-                current_name = src.get(CONF_NAME) or None
-                options_to_persist = await self._save_source(
-                    source_entity, new_windows, source_name=current_name
-                )
-                return self._async_create_options_entry(options_to_persist)
+                self._pending_delete_window_name = raw_to_remove
+                return await self.async_step_confirm_delete_window(None)
             range_error = _validate_ranges_chronological(ranges_list)
             if range_error:
                 ranges_for_form = [

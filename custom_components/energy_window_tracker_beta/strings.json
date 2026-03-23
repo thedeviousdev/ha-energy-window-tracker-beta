@@ -189,7 +189,6 @@
         "title": "Manage energy source(s)",
         "data": {
           "source_entity": "Energy source",
-          "name": "Friendly name",
           "remove_previous_entities": "❌ Delete the previously associated windows (otherwise you may manually remove them)"
         },
         "submit": "Update"
@@ -198,6 +197,11 @@
         "title": "Success!",
         "description": "Window(s) successfully updated.",
         "submit": "Finish"
+      },
+      "confirm_delete_window": {
+        "title": "Delete window",
+        "description": "All ranges were removed for **{window_name}**. Confirm to delete this window.",
+        "submit": "Delete"
       },
       "confirm_delete": {
         "title": "Delete window",

@@ -12,8 +12,8 @@ from custom_components.energy_window_tracker_beta.const import DOMAIN
 
 
 @pytest.mark.asyncio
-async def test_window_setup_create_entry_and_sensor(hass: HomeAssistant) -> None:
-    """Window-first flow creates entry and corresponding sensor entity."""
+async def test_window_setup_happy_create_entry_and_sensor(hass: HomeAssistant) -> None:
+    """[Happy] Window setup flow creates entry and corresponding sensor entity."""
     hass.states.async_set("sensor.today_load", "12.0")
 
     result = await hass.config_entries.flow.async_init(
@@ -62,6 +62,7 @@ async def test_window_setup_create_entry_and_sensor(hass: HomeAssistant) -> None
 
     windows = entry.data.get("windows") or []
     assert len(windows) == 1
+    assert windows[0]["name"] == "Peak"
     assert windows[0]["entities"] == ["sensor.today_load"]
     assert len(windows[0]["ranges"]) == 2
 

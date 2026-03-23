@@ -90,8 +90,10 @@ class WindowConfig:
 
     start_h: int
     start_m: int
+    start_s: int
     end_h: int
     end_m: int
+    end_s: int
     name: str
     index: int
     cost_per_kwh: float = 0.0
@@ -105,10 +107,13 @@ class WindowSnapshots:
     snapshot_end: float | None
 
 
-def _parse_hhmm(time_str: str) -> tuple[int, int]:
-    """Parse 'HH:MM' or 'HH:MM:SS' into (hour, minute)."""
+def _parse_hhmmss(time_str: str) -> tuple[int, int, int]:
+    """Parse 'HH:MM' or 'HH:MM:SS' into (hour, minute, second)."""
     parts = str(time_str).split(":")
-    return int(parts[0]), int(parts[1])
+    hour = int(parts[0])
+    minute = int(parts[1])
+    second = int(parts[2]) if len(parts) > 2 else 0
+    return hour, minute, second
 
 
 def _parse_hhmm_safe(
@@ -117,29 +122,28 @@ def _parse_hhmm_safe(
     window_name: str,
     which: str,
     range_index: int,
-) -> tuple[int, int, str | None]:
+) -> tuple[int, int, int, str | None]:
     """Parse a time; on error/out-of-range, return fallback and a warning message."""
     raw = "" if time_value is None else str(time_value)
     s = raw.strip()
-    if s.count(":") >= 2:
-        s = s.rsplit(":", 1)[0]
     try:
-        h, m = _parse_hhmm(s)
-        if 0 <= h <= 23 and 0 <= m <= 59:
-            return h, m, None
+        h, m, sec = _parse_hhmmss(s)
+        if 0 <= h <= 23 and 0 <= m <= 59 and 0 <= sec <= 59:
+            return h, m, sec, None
     except (TypeError, ValueError, IndexError):
         pass
-    # fallback is expected valid (HH:MM)
-    fh, fm = _parse_hhmm(fallback)
+    # fallback is expected valid (HH:MM[:SS])
+    fh, fm, fs = _parse_hhmmss(fallback)
     return (
         fh,
         fm,
+        fs,
         f"Invalid {which} time {raw!r} for {window_name} (range {range_index}); used {fallback}",
     )
 
-def _time_str(h: int, m: int) -> str:
-    """Format hour and minute as HH:MM."""
-    return f"{h:02d}:{m:02d}"
+def _time_str(h: int, m: int, s: int) -> str:
+    """Format hour, minute, and second as HH:MM:SS."""
+    return f"{h:02d}:{m:02d}:{s:02d}"
 
 
 def _parse_windows(config: dict[str, Any]) -> tuple[list[WindowConfig], dict[str, list[str]]]:
@@ -150,14 +154,14 @@ def _parse_windows(config: dict[str, Any]) -> tuple[list[WindowConfig], dict[str
     warnings_by_name: dict[str, list[str]] = {}
     for i, p in enumerate(windows_data):
         name = p.get(CONF_WINDOW_NAME) or f"Window {i + 1}"
-        start_h, start_m, w1 = _parse_hhmm_safe(
+        start_h, start_m, start_s, w1 = _parse_hhmm_safe(
             p.get(CONF_WINDOW_START) or "11:00",
             "11:00",
             name,
             "start",
             i + 1,
         )
-        end_h, end_m, w2 = _parse_hhmm_safe(
+        end_h, end_m, end_s, w2 = _parse_hhmm_safe(
             p.get(CONF_WINDOW_END) or "14:00",
             "14:00",
             name,
@@ -178,8 +182,10 @@ def _parse_windows(config: dict[str, Any]) -> tuple[list[WindowConfig], dict[str
             WindowConfig(
                 start_h=start_h,
                 start_m=start_m,
+                start_s=start_s,
                 end_h=end_h,
                 end_m=end_m,
+                end_s=end_s,
                 name=name,
                 index=i,
                 cost_per_kwh=cost_per_kwh,
@@ -260,15 +266,15 @@ class WindowData:
         """
         total = self.get_source_value()
         now = self._now()
-        current_minutes = now.hour * 60 + now.minute
+        current_seconds = now.hour * 3600 + now.minute * 60 + now.second
         if not self._snapshots_valid_today():
             snap = WindowSnapshots(None, None)
         else:
             snap = self._snapshots.get(window.index) or WindowSnapshots(None, None)
-        start_min = window.start_h * 60 + window.start_m
-        end_min = window.end_h * 60 + window.end_m
-        in_window = start_min <= current_minutes < end_min
-        window_ended = current_minutes >= end_min
+        start_seconds = window.start_h * 3600 + window.start_m * 60 + window.start_s
+        end_seconds = window.end_h * 3600 + window.end_m * 60 + window.end_s
+        in_window = start_seconds <= current_seconds < end_seconds
+        window_ended = current_seconds >= end_seconds
 
         if total is None:
             return None, "unavailable"
@@ -305,13 +311,13 @@ class WindowData:
         if snap.snapshot_start is not None:
             return False
         now = self._now()
-        current_minutes = now.hour * 60 + now.minute
+        current_seconds = now.hour * 3600 + now.minute * 60 + now.second
         for w in self._windows:
             if w.index != window_index:
                 continue
-            start_min = w.start_h * 60 + w.start_m
-            end_min = w.end_h * 60 + w.end_m
-            in_window = start_min <= current_minutes < end_min
+            start_seconds = w.start_h * 3600 + w.start_m * 60 + w.start_s
+            end_seconds = w.end_h * 3600 + w.end_m * 60 + w.end_s
+            in_window = start_seconds <= current_seconds < end_seconds
             if not in_window:
                 return False
             if not self._snapshot_date:
@@ -433,6 +439,16 @@ class WindowData:
 
 def _get_sources_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
     """Return sources from either legacy source-first or windows-based config."""
+    def _normalize_time_str(value: Any) -> str:
+        raw = "" if value is None else str(value).strip()
+        try:
+            hour, minute, second = _parse_hhmmss(raw)
+            if 0 <= hour <= 23 and 0 <= minute <= 59 and 0 <= second <= 59:
+                return f"{hour:02d}:{minute:02d}:{second:02d}"
+        except (TypeError, ValueError, IndexError):
+            return ""
+        return ""
+
     raw = config.get(CONF_SOURCES)
     if isinstance(raw, list) and raw:
         return [raw[0]]  # Only first source; one entry = one source
@@ -458,8 +474,8 @@ def _get_sources_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
             for r in ranges:
                 if not isinstance(r, dict):
                     continue
-                start = str(r.get(CONF_WINDOW_START) or "").strip()
-                end = str(r.get(CONF_WINDOW_END) or "").strip()
+                start = _normalize_time_str(r.get(CONF_WINDOW_START))
+                end = _normalize_time_str(r.get(CONF_WINDOW_END))
                 if not start or not end or start >= end:
                     continue
                 range_rows.append(
@@ -707,7 +723,7 @@ class WindowEnergySensor(RestoreSensor):
                         lambda t, window=w: self._data._handle_window_start(window, t),
                         hour=w.start_h,
                         minute=w.start_m,
-                        second=0,
+                        second=w.start_s,
                     )
                 )
                 unsubs.append(
@@ -716,7 +732,7 @@ class WindowEnergySensor(RestoreSensor):
                         lambda t, window=w: self._data._handle_window_end(window, t),
                         hour=w.end_h,
                         minute=w.end_m,
-                        second=0,
+                        second=w.end_s,
                     )
                 )
             unsubs.append(
@@ -794,8 +810,8 @@ class WindowEnergySensor(RestoreSensor):
             if r.cost_per_kwh and r.cost_per_kwh > 0:
                 rates.append(r.cost_per_kwh)
             range_attrs.append({
-                "start": _time_str(r.start_h, r.start_m),
-                "end": _time_str(r.end_h, r.end_m),
+                "start": _time_str(r.start_h, r.start_m, r.start_s),
+                "end": _time_str(r.end_h, r.end_m, r.end_s),
             })
             if status.startswith("during_window"):
                 combined_status = status

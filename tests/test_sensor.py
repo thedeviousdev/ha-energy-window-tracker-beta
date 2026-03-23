@@ -61,6 +61,8 @@ def test_get_sources_from_config_happy_windows_based_conversion() -> None:
     for row in out:
         assert len(row[CONF_WINDOWS]) == 2
         assert row[CONF_WINDOWS][0][CONF_WINDOW_NAME] == "Peak"
+        assert row[CONF_WINDOWS][0][CONF_WINDOW_START] == "09:00:00"
+        assert row[CONF_WINDOWS][0][CONF_WINDOW_END] == "11:00:00"
 
 
 def test_get_sources_from_config_unhappy_invalid_ranges_filtered() -> None:
@@ -95,10 +97,29 @@ def test_parse_windows_unhappy_invalid_time_uses_fallback_and_warning() -> None:
         }
     )
     assert len(windows) == 1
-    assert windows[0].start_h == 11 and windows[0].start_m == 0
-    assert windows[0].end_h == 14 and windows[0].end_m == 0
+    assert windows[0].start_h == 11 and windows[0].start_m == 0 and windows[0].start_s == 0
+    assert windows[0].end_h == 14 and windows[0].end_m == 0 and windows[0].end_s == 0
     assert "Peak" in warnings
     assert len(warnings["Peak"]) >= 1
+
+
+def test_parse_windows_happy_supports_seconds_precision() -> None:
+    """[Happy] Window parser keeps seconds precision for start/end."""
+    windows, warnings = _parse_windows(
+        {
+            CONF_WINDOWS: [
+                {
+                    CONF_WINDOW_NAME: "Peak",
+                    CONF_WINDOW_START: "09:00:15",
+                    CONF_WINDOW_END: "17:30:45",
+                }
+            ]
+        }
+    )
+    assert not warnings
+    assert len(windows) == 1
+    assert (windows[0].start_h, windows[0].start_m, windows[0].start_s) == (9, 0, 15)
+    assert (windows[0].end_h, windows[0].end_m, windows[0].end_s) == (17, 30, 45)
 
 
 @pytest.mark.asyncio

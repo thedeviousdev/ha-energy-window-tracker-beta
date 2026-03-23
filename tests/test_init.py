@@ -13,7 +13,7 @@ from custom_components.energy_window_tracker_beta.const import CONF_SOURCES, DOM
 
 
 @pytest.mark.asyncio
-async def test_setup_and_unload_entry(
+async def test_setup_and_unload_happy_entry(
     hass: HomeAssistant,
     mock_legacy_config_entry: ConfigEntry,
 ) -> None:
@@ -35,7 +35,7 @@ async def test_setup_and_unload_entry(
 
 
 @pytest.mark.asyncio
-async def test_unload_when_not_loaded_succeeds(hass: HomeAssistant) -> None:
+async def test_unload_unhappy_when_not_loaded_succeeds(hass: HomeAssistant) -> None:
     """[Unhappy] Unloading an entry that was never set up does not crash."""
     entry = MockConfigEntry(
         domain=DOMAIN,
@@ -50,7 +50,7 @@ async def test_unload_when_not_loaded_succeeds(hass: HomeAssistant) -> None:
 
 
 @pytest.mark.asyncio
-async def test_update_options_does_not_reload_when_not_loaded(
+async def test_update_options_unhappy_does_not_reload_when_not_loaded(
     hass: HomeAssistant,
     mock_legacy_config_entry: ConfigEntry,
 ) -> None:
