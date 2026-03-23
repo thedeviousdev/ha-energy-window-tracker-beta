@@ -1,5 +1,19 @@
 # Changelog
 
+## [2.3.42](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.41...v2.3.42) (2026-03-23)
+
+
+### Features
+
+* **options:** show success modal and return to configure ([529c9c7](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/529c9c70565a9f641395d7c1ed86691dbe320513))
+
+
+### Bug Fixes
+
+* **i18n:** use generic delete label for ranges ([639a0b0](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/639a0b0f19b72d047ecfcff8177faba7d99631ce))
+* **ui:** improve options flow window/range editing UX ([#6](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/6)) ([69a14de](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/69a14def03bdbf6006ff36e6eb31c5cbf34a5213))
+* **ui:** simplify success modal description ([acb4749](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/acb474927136c0bfb9af1c741e6d9a1f3c92281d))
+
 ## [2.3.41](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.40...v2.3.41) (2026-03-23)
 
 
