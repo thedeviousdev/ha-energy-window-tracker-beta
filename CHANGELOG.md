@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.45](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.44...v2.3.45) (2026-03-23)
+
+
+### Bug Fixes
+
+* **ui:** clear times to remove ranges (no delete checkbox) ([#12](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/12)) ([c82f4a2](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/c82f4a218fab1d4b4994839c5a342a5a71319b54))
+
 ## [2.3.44](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.43...v2.3.44) (2026-03-23)
 
 
