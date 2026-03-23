@@ -197,6 +197,11 @@
         },
         "submit": "Update"
       },
+      "options_saved": {
+        "title": "Success!",
+        "description": "Window(s) successfully updated.",
+        "submit": "Finish"
+      },
       "confirm_delete": {
         "title": "Delete window",
         "description": "Are you sure you want to delete **{window_name}**? This cannot be undone."
@@ -227,16 +232,16 @@
           "end_9": "End time #9",
           "start_10": "Start time #10",
           "end_10": "End time #10",
-          "delete_range_1": "❌ Delete range #1",
-          "delete_range_2": "❌ Delete range #2",
-          "delete_range_3": "❌ Delete range #3",
-          "delete_range_4": "❌ Delete range #4",
-          "delete_range_5": "❌ Delete range #5",
-          "delete_range_6": "❌ Delete range #6",
-          "delete_range_7": "❌ Delete range #7",
-          "delete_range_8": "❌ Delete range #8",
-          "delete_range_9": "❌ Delete range #9",
-          "delete_range_10": "❌ Delete range #10",
+          "delete_range_1": "❌ Delete?",
+          "delete_range_2": "❌ Delete?",
+          "delete_range_3": "❌ Delete?",
+          "delete_range_4": "❌ Delete?",
+          "delete_range_5": "❌ Delete?",
+          "delete_range_6": "❌ Delete?",
+          "delete_range_7": "❌ Delete?",
+          "delete_range_8": "❌ Delete?",
+          "delete_range_9": "❌ Delete?",
+          "delete_range_10": "❌ Delete?",
           "add_another": "Add another time range"
         },
         "submit": "Save"

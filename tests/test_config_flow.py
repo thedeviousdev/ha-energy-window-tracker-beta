@@ -191,7 +191,11 @@ async def test_options_add_window_happy_path_persists(
                 "end_1": "07:00",
             },
         )
-    assert result["type"] is data_entry_flow.FlowResultType.CREATE_ENTRY
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "options_saved"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["type"] is data_entry_flow.FlowResultType.MENU
+    assert result["step_id"] == "init"
     entry = hass.config_entries.async_get_entry(mock_legacy_config_entry.entry_id)
     assert entry is not None
     source_rows = (entry.options.get(CONF_SOURCES) or entry.data.get(CONF_SOURCES) or [])[0]
