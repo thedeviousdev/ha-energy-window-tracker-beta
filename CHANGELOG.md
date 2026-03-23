@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.44](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.43...v2.3.44) (2026-03-23)
+
+
+### Bug Fixes
+
+* **flow:** surface setup failure on initial multi-entity add ([#10](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/10)) ([20bc5a0](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/20bc5a08828c6ab85282f4e72edd17a02dc5f3ad))
+
 ## [2.3.43](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.42...v2.3.43) (2026-03-23)
 
 
