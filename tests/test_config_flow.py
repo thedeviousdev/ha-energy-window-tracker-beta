@@ -33,7 +33,9 @@ async def test_user_flow_happy_starts_on_window_setup_step(hass: HomeAssistant) 
 
 
 @pytest.mark.asyncio
-async def test_window_setup_unhappy_overlap_ranges_rejected(hass: HomeAssistant) -> None:
+async def test_window_setup_unhappy_overlap_ranges_rejected(
+    hass: HomeAssistant,
+) -> None:
     """[Unhappy] Overlapping ranges show base error."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -66,7 +68,9 @@ async def test_window_setup_unhappy_overlap_ranges_rejected(hass: HomeAssistant)
 
 
 @pytest.mark.asyncio
-async def test_window_entities_unhappy_requires_at_least_one_entity(hass: HomeAssistant) -> None:
+async def test_window_entities_unhappy_requires_at_least_one_entity(
+    hass: HomeAssistant,
+) -> None:
     """[Unhappy] window_entities validates empty selection."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
@@ -96,7 +100,9 @@ async def test_options_flow_happy_opens_from_window_setup_entry(
     hass: HomeAssistant, mock_window_setup_entry
 ) -> None:
     """[Happy] Options flow loads for a windows-based-created entry."""
-    result = await hass.config_entries.options.async_init(mock_window_setup_entry.entry_id)
+    result = await hass.config_entries.options.async_init(
+        mock_window_setup_entry.entry_id
+    )
     assert result["type"] is data_entry_flow.FlowResultType.MENU
     assert result["step_id"] == "init"
 
@@ -106,7 +112,9 @@ async def test_options_source_entity_unhappy_unchanged_with_remove_previous_reje
     hass: HomeAssistant, mock_legacy_config_entry
 ) -> None:
     """[Unhappy] Selecting same source + remove_previous_entities is rejected."""
-    result = await hass.config_entries.options.async_init(mock_legacy_config_entry.entry_id)
+    result = await hass.config_entries.options.async_init(
+        mock_legacy_config_entry.entry_id
+    )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "source_entity"}
     )
@@ -121,7 +129,9 @@ async def test_options_source_entity_unhappy_unchanged_with_remove_previous_reje
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
     assert result["step_id"] == "source_entity"
-    assert result.get("errors", {}).get("base") == "remove_previous_but_source_unchanged"
+    assert (
+        result.get("errors", {}).get("base") == "remove_previous_but_source_unchanged"
+    )
 
 
 @pytest.mark.asyncio
@@ -152,7 +162,9 @@ async def test_options_source_entity_unhappy_already_in_use_rejected(
     )
     other.add_to_hass(hass)
 
-    result = await hass.config_entries.options.async_init(mock_legacy_config_entry.entry_id)
+    result = await hass.config_entries.options.async_init(
+        mock_legacy_config_entry.entry_id
+    )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "source_entity"}
     )
@@ -174,7 +186,9 @@ async def test_options_add_window_happy_path_persists(
 ) -> None:
     """[Happy] Options add_window persists new range rows."""
     with patch.object(hass.config_entries, "async_reload", new_callable=AsyncMock):
-        result = await hass.config_entries.options.async_init(mock_legacy_config_entry.entry_id)
+        result = await hass.config_entries.options.async_init(
+            mock_legacy_config_entry.entry_id
+        )
         result = await hass.config_entries.options.async_configure(
             result["flow_id"], {"next_step_id": "add_window"}
         )
@@ -196,7 +210,9 @@ async def test_options_add_window_happy_path_persists(
     assert result["step_id"] == "init"
     entry = hass.config_entries.async_get_entry(mock_legacy_config_entry.entry_id)
     assert entry is not None
-    source_rows = (entry.options.get(CONF_SOURCES) or entry.data.get(CONF_SOURCES) or [])[0]
+    source_rows = (
+        entry.options.get(CONF_SOURCES) or entry.data.get(CONF_SOURCES) or []
+    )[0]
     windows = source_rows[CONF_WINDOWS]
     assert any(
         w.get(CONF_WINDOW_NAME) == "Off-Peak"
@@ -267,7 +283,11 @@ async def test_options_edit_window_happy_preserves_other_sources(
 
     saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
     assert saved_entry is not None
-    sources = (saved_entry.options.get(CONF_SOURCES) or saved_entry.data.get(CONF_SOURCES) or [])
+    sources = (
+        saved_entry.options.get(CONF_SOURCES)
+        or saved_entry.data.get(CONF_SOURCES)
+        or []
+    )
     assert len(sources) == 2
     by_entity = {
         src.get(CONF_SOURCE_ENTITY): src
@@ -276,8 +296,13 @@ async def test_options_edit_window_happy_preserves_other_sources(
     }
     assert "sensor.today_load" in by_entity
     assert "sensor.today_import" in by_entity
-    assert by_entity["sensor.today_load"][CONF_WINDOWS][0][CONF_WINDOW_END] == "12:00:00"
-    assert by_entity["sensor.today_import"][CONF_WINDOWS][0][CONF_WINDOW_NAME] == "Import Peak"
+    assert (
+        by_entity["sensor.today_load"][CONF_WINDOWS][0][CONF_WINDOW_END] == "12:00:00"
+    )
+    assert (
+        by_entity["sensor.today_import"][CONF_WINDOWS][0][CONF_WINDOW_NAME]
+        == "Import Peak"
+    )
 
 
 @pytest.mark.asyncio
@@ -340,7 +365,11 @@ async def test_options_source_entity_happy_update_preserves_other_sources(
 
     saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
     assert saved_entry is not None
-    sources = (saved_entry.options.get(CONF_SOURCES) or saved_entry.data.get(CONF_SOURCES) or [])
+    sources = (
+        saved_entry.options.get(CONF_SOURCES)
+        or saved_entry.data.get(CONF_SOURCES)
+        or []
+    )
     assert len(sources) == 2
     entities = {
         src.get(CONF_SOURCE_ENTITY)
@@ -456,7 +485,11 @@ async def test_options_edit_window_happy_delete_middle_range_preserves_flow(
 
     saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
     assert saved_entry is not None
-    sources = (saved_entry.options.get(CONF_SOURCES) or saved_entry.data.get(CONF_SOURCES) or [])
+    sources = (
+        saved_entry.options.get(CONF_SOURCES)
+        or saved_entry.data.get(CONF_SOURCES)
+        or []
+    )
     assert len(sources) == 1
     windows = sources[0][CONF_WINDOWS]
     assert len(windows) == 2
@@ -566,7 +599,11 @@ async def test_options_edit_window_happy_delete_all_ranges_after_confirmation(
 
     saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
     assert saved_entry is not None
-    sources = (saved_entry.options.get(CONF_SOURCES) or saved_entry.data.get(CONF_SOURCES) or [])
+    sources = (
+        saved_entry.options.get(CONF_SOURCES)
+        or saved_entry.data.get(CONF_SOURCES)
+        or []
+    )
     assert len(sources) == 1
     assert sources[0][CONF_WINDOWS] == []
 
@@ -627,7 +664,9 @@ async def test_options_add_window_happy_duplicate_name_allowed(
     hass: HomeAssistant, mock_legacy_config_entry
 ) -> None:
     """[Happy] Adding another window with the same name is allowed."""
-    result = await hass.config_entries.options.async_init(mock_legacy_config_entry.entry_id)
+    result = await hass.config_entries.options.async_init(
+        mock_legacy_config_entry.entry_id
+    )
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "add_window"}
     )
@@ -647,7 +686,11 @@ async def test_options_add_window_happy_duplicate_name_allowed(
 
     saved_entry = hass.config_entries.async_get_entry(mock_legacy_config_entry.entry_id)
     assert saved_entry is not None
-    sources = (saved_entry.options.get(CONF_SOURCES) or saved_entry.data.get(CONF_SOURCES) or [])
+    sources = (
+        saved_entry.options.get(CONF_SOURCES)
+        or saved_entry.data.get(CONF_SOURCES)
+        or []
+    )
     assert len(sources) == 1
     windows = sources[0][CONF_WINDOWS]
     peak_rows = [w for w in windows if w.get(CONF_WINDOW_NAME) == "Peak"]

@@ -1,7 +1,7 @@
 {
   "domain": "energy_window_tracker_beta",
   "name": "Energy Window Tracker (Beta)",
-  "version": "2.3.42",
+  "version": "2.3.45",
   "documentation": "https://github.com/thedeviousdev/ha-energy-window-tracker-beta",
   "issue_tracker": "https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues",
   "codeowners": [],

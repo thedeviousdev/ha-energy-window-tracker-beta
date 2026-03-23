@@ -141,4 +141,3 @@ async def test_window_setup_happy_neutralize_extra_placeholder_range_slot_delete
     assert len(windows[0]["ranges"]) == 1
     assert windows[0]["ranges"][0]["start"] == "09:00:00"
     assert windows[0]["ranges"][0]["end"] == "11:00:00"
-

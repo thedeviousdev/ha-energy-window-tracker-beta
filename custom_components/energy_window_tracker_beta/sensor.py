@@ -141,12 +141,15 @@ def _parse_hhmm_safe(
         f"Invalid {which} time {raw!r} for {window_name} (range {range_index}); used {fallback}",
     )
 
+
 def _time_str(h: int, m: int, s: int) -> str:
     """Format hour, minute, and second as HH:MM:SS."""
     return f"{h:02d}:{m:02d}:{s:02d}"
 
 
-def _parse_windows(config: dict[str, Any]) -> tuple[list[WindowConfig], dict[str, list[str]]]:
+def _parse_windows(
+    config: dict[str, Any],
+) -> tuple[list[WindowConfig], dict[str, list[str]]]:
     """Parse window config from entry data."""
     windows_data = config.get(CONF_WINDOWS) or []
     _MAIN_LOGGER.warning("_parse_windows: len(windows_data)=%s", len(windows_data))
@@ -359,10 +362,17 @@ class WindowData:
                             snapshot_end=sd.get("snapshot_end"),
                         )
                         loaded += 1
-                _MAIN_LOGGER.warning("sensor: load - %s snapshot_date=%s loaded %s window(s)", self._source_entity, self._snapshot_date, loaded)
+                _MAIN_LOGGER.warning(
+                    "sensor: load - %s snapshot_date=%s loaded %s window(s)",
+                    self._source_entity,
+                    self._snapshot_date,
+                    loaded,
+                )
         else:
             self._snapshot_date = today
-            _MAIN_LOGGER.warning("sensor: load - %s no stored data", self._source_entity)
+            _MAIN_LOGGER.warning(
+                "sensor: load - %s no stored data", self._source_entity
+            )
 
     async def save(self) -> None:
         """Persist snapshots to storage."""
@@ -376,7 +386,12 @@ class WindowData:
         await self._store.async_save(
             {"windows": snapshots_data, "snapshot_date": self._snapshot_date}
         )
-        _MAIN_LOGGER.warning("sensor: save - %s snapshot_date=%s %s window(s)", self._source_entity, self._snapshot_date, len(snapshots_data))
+        _MAIN_LOGGER.warning(
+            "sensor: save - %s snapshot_date=%s %s window(s)",
+            self._source_entity,
+            self._snapshot_date,
+            len(snapshots_data),
+        )
 
     def _handle_window_start(self, window: WindowConfig, now: datetime) -> None:
         """Snapshot at window start."""
@@ -395,7 +410,9 @@ class WindowData:
                 snapshot_start=value,
                 snapshot_end=None,
             )
-            _MAIN_LOGGER.warning("sensor: window '%s' start - %.3f kWh", window.name, value)
+            _MAIN_LOGGER.warning(
+                "sensor: window '%s' start - %.3f kWh", window.name, value
+            )
             self._schedule_save()
         self._notify_update()
 
@@ -408,7 +425,9 @@ class WindowData:
                 snapshot_start=snap.snapshot_start,
                 snapshot_end=value,
             )
-            _MAIN_LOGGER.warning("sensor: window '%s' end - %.3f kWh", window.name, value)
+            _MAIN_LOGGER.warning(
+                "sensor: window '%s' end - %.3f kWh", window.name, value
+            )
             self._schedule_save()
         self._notify_update()
 
@@ -421,7 +440,9 @@ class WindowData:
             local_now.isoformat(),
             getattr(self._tz, "key", str(self._tz)),
         )
-        _MAIN_LOGGER.warning("sensor: _handle_midnight - resetting snapshots for %s", self._source_entity)
+        _MAIN_LOGGER.warning(
+            "sensor: _handle_midnight - resetting snapshots for %s", self._source_entity
+        )
         self._snapshots = {
             w.index: WindowSnapshots(snapshot_start=None, snapshot_end=None)
             for w in self._windows
@@ -439,6 +460,7 @@ class WindowData:
 
 def _get_sources_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
     """Return sources from either legacy source-first or windows-based config."""
+
     def _normalize_time_str(value: Any) -> str:
         raw = "" if value is None else str(value).strip()
         try:
@@ -513,7 +535,9 @@ async def async_setup_entry(
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up the sensor platform (one or more sources under this entry)."""
-    _MAIN_LOGGER.warning("sensor: async_setup_entry - entry_id=%s, setting up entities", entry.entry_id)
+    _MAIN_LOGGER.warning(
+        "sensor: async_setup_entry - entry_id=%s, setting up entities", entry.entry_id
+    )
     config = {**entry.data, **entry.options}
     sources = _get_sources_from_config(config)
     if not sources:
@@ -527,11 +551,16 @@ async def async_setup_entry(
 
     for source_index, source_config in enumerate(sources):
         if not isinstance(source_config, dict):
-            _MAIN_LOGGER.warning("sensor: async_setup_entry - source %s is not a dict", source_index)
+            _MAIN_LOGGER.warning(
+                "sensor: async_setup_entry - source %s is not a dict", source_index
+            )
             continue
         source_entity = source_config.get(CONF_SOURCE_ENTITY)
         if not source_entity:
-            _MAIN_LOGGER.warning("sensor: async_setup_entry - source %s has no source_entity", source_index)
+            _MAIN_LOGGER.warning(
+                "sensor: async_setup_entry - source %s has no source_entity",
+                source_index,
+            )
             continue
         if not isinstance(source_entity, str):
             _MAIN_LOGGER.warning(
@@ -539,7 +568,11 @@ async def async_setup_entry(
                 source_index,
                 type(source_entity).__name__,
             )
-            source_entity = source_entity[0] if isinstance(source_entity, list) and source_entity else str(source_entity)
+            source_entity = (
+                source_entity[0]
+                if isinstance(source_entity, list) and source_entity
+                else str(source_entity)
+            )
         source_name = source_config.get(CONF_NAME) or "Window"
         windows, warnings_by_name = _parse_windows(source_config)
         if not windows:
@@ -555,7 +588,9 @@ async def async_setup_entry(
         # when window order changes (older versions used index-based unique_ids).
         registry = er.async_get(hass)
         existing_unique_id_by_name: dict[str, str] = {}
-        for entity_entry in registry.entities.get_entries_for_config_entry_id(entry.entry_id):
+        for entity_entry in registry.entities.get_entries_for_config_entry_id(
+            entry.entry_id
+        ):
             if entity_entry.domain != "sensor" or entity_entry.platform != DOMAIN:
                 continue
             if not entity_entry.unique_id.startswith(f"{entry.entry_id}_{slug}_"):
@@ -613,7 +648,11 @@ async def async_setup_entry(
     # unless they are in the retain list (user chose not to remove when changing source).
     retain_ids = set(entry.options.get("_retain_entity_unique_ids") or [])
     if retain_ids:
-        new_options = {k: v for k, v in (entry.options or {}).items() if k != "_retain_entity_unique_ids"}
+        new_options = {
+            k: v
+            for k, v in (entry.options or {}).items()
+            if k != "_retain_entity_unique_ids"
+        }
         hass.config_entries.async_update_entry(entry, options=new_options or None)
     current_unique_ids = {sensor.unique_id for sensor in all_sensors}
     registry = er.async_get(hass)
@@ -695,7 +734,9 @@ class WindowEnergySensor(RestoreSensor):
 
     async def async_added_to_hass(self) -> None:
         """Restore state and register listeners."""
-        _MAIN_LOGGER.debug("sensor: added to hass - %r entity_id=%s", self._window_name, self.entity_id)
+        _MAIN_LOGGER.debug(
+            "sensor: added to hass - %r entity_id=%s", self._window_name, self.entity_id
+        )
         await super().async_added_to_hass()
 
         # Friendly name is window name only (entity_id already includes source from __init__ name).
@@ -757,7 +798,9 @@ class WindowEnergySensor(RestoreSensor):
         old_status = self._last_status
         old_source = self._last_source_value
         self._update_value()
-        value_or_status_changed = old_value != self._attr_native_value or old_status != self._last_status
+        value_or_status_changed = (
+            old_value != self._attr_native_value or old_status != self._last_status
+        )
         source_changed = old_source != self._last_source_value
         if self.entity_id and (value_or_status_changed or source_changed):
             self.async_write_ha_state()
@@ -769,7 +812,9 @@ class WindowEnergySensor(RestoreSensor):
         old_status = self._last_status
         old_source = self._last_source_value
         self._update_value()
-        value_or_status_changed = old_value != self._attr_native_value or old_status != self._last_status
+        value_or_status_changed = (
+            old_value != self._attr_native_value or old_status != self._last_status
+        )
         source_changed = old_source != self._last_source_value
         if self.entity_id and (value_or_status_changed or source_changed):
             if value_or_status_changed:
@@ -809,29 +854,36 @@ class WindowEnergySensor(RestoreSensor):
                     )
             if r.cost_per_kwh and r.cost_per_kwh > 0:
                 rates.append(r.cost_per_kwh)
-            range_attrs.append({
-                "start": _time_str(r.start_h, r.start_m, r.start_s),
-                "end": _time_str(r.end_h, r.end_m, r.end_s),
-            })
+            range_attrs.append(
+                {
+                    "start": _time_str(r.start_h, r.start_m, r.start_s),
+                    "end": _time_str(r.end_h, r.end_m, r.end_s),
+                }
+            )
             if status.startswith("during_window"):
                 combined_status = status
-            elif status.startswith("after_window") and not combined_status.startswith("during_window"):
+            elif status.startswith("after_window") and not combined_status.startswith(
+                "during_window"
+            ):
                 combined_status = status
 
-        self._attr_native_value = round(total_value, 3) if total_value is not None else None
+        self._attr_native_value = (
+            round(total_value, 3) if total_value is not None else None
+        )
         attrs: dict[str, Any] = {
             ATTR_SOURCE_ENTITY: self._data._source_entity,
             ATTR_STATUS: combined_status,
             "ranges": range_attrs,
         }
-        if (cw := self._data._config_warnings_by_name.get(self._window_name)):
+        if cw := self._data._config_warnings_by_name.get(self._window_name):
             attrs["config_warnings"] = list(cw)
         if rates:
             # Always expose cost when rate is configured so automations can track a running balance.
             attrs[ATTR_COST] = round(total_cost, 2)
             uniq_rates = sorted({round(float(x), 6) for x in rates})
-            attrs["cost_per_kwh"] = uniq_rates[0] if len(uniq_rates) == 1 else uniq_rates
+            attrs["cost_per_kwh"] = (
+                uniq_rates[0] if len(uniq_rates) == 1 else uniq_rates
+            )
         self._attr_extra_state_attributes = attrs
         self._last_source_value = self._data.get_source_value()
         self._last_status = combined_status
-

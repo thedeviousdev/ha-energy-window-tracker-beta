@@ -97,7 +97,9 @@ def test_parse_windows_unhappy_invalid_time_uses_fallback_and_warning() -> None:
         }
     )
     assert len(windows) == 1
-    assert windows[0].start_h == 11 and windows[0].start_m == 0 and windows[0].start_s == 0
+    assert (
+        windows[0].start_h == 11 and windows[0].start_m == 0 and windows[0].start_s == 0
+    )
     assert windows[0].end_h == 14 and windows[0].end_m == 0 and windows[0].end_s == 0
     assert "Peak" in warnings
     assert len(warnings["Peak"]) >= 1
@@ -164,7 +166,9 @@ async def test_sensor_setup_unhappy_source_unavailable(
 
 
 @pytest.mark.asyncio
-async def test_sensor_setup_happy_legacy_entry_multiple_windows(hass: HomeAssistant) -> None:
+async def test_sensor_setup_happy_legacy_entry_multiple_windows(
+    hass: HomeAssistant,
+) -> None:
     """[Happy] Legacy config with two named windows creates two sensors."""
     entry = MockConfigEntry(
         domain=DOMAIN,

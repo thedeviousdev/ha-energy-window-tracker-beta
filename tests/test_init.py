@@ -64,4 +64,3 @@ async def test_update_options_unhappy_does_not_reload_when_not_loaded(
     with patch.object(hass.config_entries, "async_reload", new_callable=AsyncMock) as m:
         await async_update_options(hass, _StubEntry())  # type: ignore[arg-type]
     m.assert_not_called()
-
