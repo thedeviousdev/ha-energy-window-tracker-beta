@@ -310,11 +310,13 @@ def _build_single_window_multi_range_schema(
     ranges: list[dict[str, str]],
     include_add_another: bool,
     include_delete: bool = False,
+    include_range_delete: bool = False,
     num_slots: int | None = None,
 ) -> vol.Schema:
     """Build schema: one window name, one cost, then start/end for start_1/end_1, start_2/end_2, ...
     Labels: "Start time #1", "End time #1", "Start time #2", etc. (built in _get_window_form_labels).
     If num_slots is set, that many range slots are shown; otherwise max(1, len(ranges)).
+    If include_range_delete is True, adds a `delete_range_N` boolean for each range slot.
     """
     schema_dict: dict[Any, Any] = {}
     if default_source_name is not None:
@@ -346,6 +348,10 @@ def _build_single_window_multi_range_schema(
         schema_dict[
             vol.Optional(ek, default=e_def, description=end_desc)
         ] = _TIME_SELECTOR
+        if include_range_delete:
+            schema_dict[
+                vol.Optional(f"delete_range_{idx}", default=False, description="Delete range")
+            ] = bool
     if include_add_another:
         schema_dict[
             vol.Optional("add_another", default=False, description=labels.get("add_another"))
@@ -365,6 +371,8 @@ def _collect_ranges_from_single_window_form(
     cost = _parse_cost(data.get(CONF_COST_PER_KWH))
     out: list[tuple[str, str]] = []
     for idx in range(1, num_ranges + 1):
+        if data.get(f"delete_range_{idx}"):
+            continue
         start = _time_to_str(data.get(f"start_{idx}") or "00:00")
         end = _time_to_str(data.get(f"end_{idx}") or "00:00")
         if start < end:
@@ -1987,6 +1995,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     ranges_for_form,
                     include_add_another=True,
                     include_delete=False,
+                    include_range_delete=True,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(step_id="edit_window", data_schema=schema, errors=time_errors)
@@ -2027,6 +2036,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     err_labels, None, w_name or "", cost_val,
                     ranges_for_form,
                     include_add_another=True, include_delete=False,
+                    include_range_delete=True,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(step_id="edit_window", data_schema=schema, errors={"base": range_error})
@@ -2043,7 +2053,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 labels = await _get_window_form_labels(self.hass, "options", "edit_window", num_ranges=num_ranges)
                 schema = _build_single_window_multi_range_schema(
                     labels, None, self._pending_add_name, self._pending_add_cost, self._pending_add_ranges,
-                    include_add_another=True, include_delete=False,
+                    include_add_another=True, include_delete=False, include_range_delete=True,
                     num_slots=num_ranges,
                 )
                 return self.async_show_form(step_id="edit_window", data_schema=schema)
@@ -2067,6 +2077,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
         _MAIN_LOGGER.warning("options flow: showing form step_id=edit_window")
         schema = _build_single_window_multi_range_schema(
             labels, None, edit_name, cost, ranges_data, include_add_another=True, include_delete=False,
+            include_range_delete=True,
             num_slots=num_ranges,
         )
         return self.async_show_form(step_id="edit_window", data_schema=schema)
