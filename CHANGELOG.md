@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.3.58](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.57...v2.3.58) (2026-03-24)
+
+
+### Bug Fixes
+
+* **flow:** persist import/export rates through edit paths ([#44](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/44)) ([0bcb6f1](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/0bcb6f135a02d6f9934f6f8ee4934329cf8862df))
+
+
+### Refactoring
+
+* **flow:** remove remaining source-legacy paths ([#42](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/42)) ([2cb0166](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/2cb01663f4f4201a9a595cdd0364e78e6e77276d))
+
 ## [2.3.57](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.56...v2.3.57) (2026-03-24)
 
 
