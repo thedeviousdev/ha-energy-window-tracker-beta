@@ -26,7 +26,7 @@ async def test_window_setup_happy_create_entry_and_sensor(hass: HomeAssistant) -
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00",
             "end_1": "11:00",
             "add_another": True,
@@ -38,7 +38,7 @@ async def test_window_setup_happy_create_entry_and_sensor(hass: HomeAssistant) -
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00",
             "end_1": "11:00",
             "start_2": "17:00",
@@ -106,7 +106,7 @@ async def test_window_setup_happy_neutralize_extra_placeholder_range_slot_delete
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00:00",
             "end_1": "11:00:00",
             "add_another": True,
@@ -119,7 +119,7 @@ async def test_window_setup_happy_neutralize_extra_placeholder_range_slot_delete
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00:00",
             "end_1": "11:00:00",
             "start_2": "17:00:00",

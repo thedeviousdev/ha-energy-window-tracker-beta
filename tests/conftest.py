@@ -8,8 +8,8 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.energy_window_tracker_beta.const import (
-    CONF_COST_PER_KWH,
     CONF_ENTITIES,
+    CONF_IMPORT_RATE_PER_KWH,
     CONF_RANGES,
     CONF_WINDOW_END,
     CONF_WINDOW_NAME,
@@ -35,7 +35,7 @@ def mock_legacy_config_entry(hass: HomeAssistant) -> ConfigEntry:
             CONF_WINDOWS: [
                 {
                     CONF_WINDOW_NAME: "Peak",
-                    CONF_COST_PER_KWH: 0.2,
+                    CONF_IMPORT_RATE_PER_KWH: 0.2,
                     CONF_ENTITIES: ["sensor.today_load"],
                     CONF_RANGES: [
                         {
@@ -63,7 +63,7 @@ def mock_window_setup_entry(hass: HomeAssistant) -> ConfigEntry:
             CONF_WINDOWS: [
                 {
                     CONF_WINDOW_NAME: "Peak",
-                    CONF_COST_PER_KWH: 0.2,
+                    CONF_IMPORT_RATE_PER_KWH: 0.2,
                     CONF_ENTITIES: ["sensor.today_load"],
                     CONF_RANGES: [
                         {CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "11:00"},

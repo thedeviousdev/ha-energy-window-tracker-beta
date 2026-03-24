@@ -30,8 +30,9 @@ from .const import (
     ATTR_COST,
     ATTR_SOURCE_ENTITY,
     ATTR_STATUS,
-    CONF_COST_PER_KWH,
     CONF_ENTITIES,
+    CONF_EXPORT_RATE_PER_KWH,
+    CONF_IMPORT_RATE_PER_KWH,
     CONF_NAME,
     CONF_RANGES,
     CONF_SOURCE_ENTITY,
@@ -75,7 +76,8 @@ class WindowConfig:
     end_s: int
     name: str
     index: int
-    cost_per_kwh: float = 0.0
+    import_rate_per_kwh: float = 0.0
+    export_rate_per_kwh: float = 0.0
 
 
 @dataclass
@@ -154,10 +156,16 @@ def _parse_windows(
             warnings_by_name.setdefault(name, []).append(w1)
         if w2:
             warnings_by_name.setdefault(name, []).append(w2)
-        cost_per_kwh = 0.0
-        if CONF_COST_PER_KWH in p and p[CONF_COST_PER_KWH] is not None:
+        import_rate_per_kwh = 0.0
+        export_rate_per_kwh = 0.0
+        if CONF_IMPORT_RATE_PER_KWH in p and p[CONF_IMPORT_RATE_PER_KWH] is not None:
             try:
-                cost_per_kwh = max(0.0, float(p[CONF_COST_PER_KWH]))
+                import_rate_per_kwh = max(0.0, float(p[CONF_IMPORT_RATE_PER_KWH]))
+            except (TypeError, ValueError):
+                pass
+        if CONF_EXPORT_RATE_PER_KWH in p and p[CONF_EXPORT_RATE_PER_KWH] is not None:
+            try:
+                export_rate_per_kwh = max(0.0, float(p[CONF_EXPORT_RATE_PER_KWH]))
             except (TypeError, ValueError):
                 pass
         windows.append(
@@ -170,7 +178,8 @@ def _parse_windows(
                 end_s=end_s,
                 name=name,
                 index=i,
-                cost_per_kwh=cost_per_kwh,
+                import_rate_per_kwh=import_rate_per_kwh,
+                export_rate_per_kwh=export_rate_per_kwh,
             )
         )
     return windows, warnings_by_name
@@ -463,8 +472,8 @@ def _get_sources_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
             name = (w.get(CONF_WINDOW_NAME) or f"Window {i + 1}") or f"Window {i + 1}"
             cost = 0.0
             try:
-                if w.get(CONF_COST_PER_KWH) is not None:
-                    cost = max(0.0, float(w.get(CONF_COST_PER_KWH)))
+                if w.get(CONF_IMPORT_RATE_PER_KWH) is not None:
+                    cost = max(0.0, float(w.get(CONF_IMPORT_RATE_PER_KWH)))
             except (TypeError, ValueError):
                 cost = 0.0
             range_rows: list[dict[str, Any]] = []
@@ -480,7 +489,7 @@ def _get_sources_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
                         CONF_WINDOW_NAME: name,
                         CONF_WINDOW_START: start,
                         CONF_WINDOW_END: end,
-                        CONF_COST_PER_KWH: cost,
+                        CONF_IMPORT_RATE_PER_KWH: cost,
                     }
                 )
             if not range_rows:
@@ -810,9 +819,9 @@ class WindowEnergySensor(RestoreSensor):
                     total_value = (total_value or 0.0) + float(value)
                 except (TypeError, ValueError):
                     pass
-            if r.cost_per_kwh > 0 and value is not None:
+            if r.import_rate_per_kwh > 0 and value is not None:
                 try:
-                    total_cost += round(float(value) * r.cost_per_kwh, 2)
+                    total_cost += round(float(value) * r.import_rate_per_kwh, 2)
                 except (TypeError, ValueError) as e:
                     _MAIN_LOGGER.debug(
                         "sensor: _update_value - cost calc failed window=%r value=%r: %s",
@@ -820,8 +829,8 @@ class WindowEnergySensor(RestoreSensor):
                         value,
                         e,
                     )
-            if r.cost_per_kwh and r.cost_per_kwh > 0:
-                rates.append(r.cost_per_kwh)
+            if r.import_rate_per_kwh and r.import_rate_per_kwh > 0:
+                rates.append(r.import_rate_per_kwh)
             range_attrs.append(
                 {
                     "start": _time_str(r.start_h, r.start_m, r.start_s),
@@ -849,8 +858,15 @@ class WindowEnergySensor(RestoreSensor):
             # Always expose cost when rate is configured so automations can track a running balance.
             attrs[ATTR_COST] = round(total_cost, 2)
             uniq_rates = sorted({round(float(x), 6) for x in rates})
-            attrs["cost_per_kwh"] = (
+            attrs["import_rate_per_kwh"] = (
                 uniq_rates[0] if len(uniq_rates) == 1 else uniq_rates
+            )
+        export_rates = sorted(
+            {round(float(r.export_rate_per_kwh), 6) for r in self._ranges if r.export_rate_per_kwh > 0}
+        )
+        if export_rates:
+            attrs["export_rate_per_kwh"] = (
+                export_rates[0] if len(export_rates) == 1 else export_rates
             )
         self._attr_extra_state_attributes = attrs
         self._last_source_value = self._data.get_source_value()

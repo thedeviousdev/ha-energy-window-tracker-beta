@@ -17,8 +17,8 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from custom_components.energy_window_tracker_beta.const import (
-    CONF_COST_PER_KWH,
     CONF_ENTITIES,
+    CONF_IMPORT_RATE_PER_KWH,
     CONF_NAME,
     CONF_SOURCE_ENTITY,
     CONF_SOURCES,
@@ -313,7 +313,7 @@ async def test_sensor_cost_calc_unhappy_fail_logging(
                             CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "17:00",
-                            CONF_COST_PER_KWH: 0.15,
+                            CONF_IMPORT_RATE_PER_KWH: 0.15,
                         }
                     ],
                 }

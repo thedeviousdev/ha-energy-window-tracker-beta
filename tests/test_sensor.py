@@ -10,8 +10,8 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.energy_window_tracker_beta.const import (
-    CONF_COST_PER_KWH,
     CONF_ENTITIES,
+    CONF_IMPORT_RATE_PER_KWH,
     CONF_RANGES,
     CONF_SOURCE_ENTITY,
     CONF_WINDOW_END,
@@ -44,7 +44,7 @@ def test_get_sources_from_config_happy_windows_based_conversion() -> None:
         CONF_WINDOWS: [
             {
                 CONF_WINDOW_NAME: "Peak",
-                CONF_COST_PER_KWH: 0.2,
+                CONF_IMPORT_RATE_PER_KWH: 0.2,
                 CONF_ENTITIES: ["sensor.a", "sensor.b"],
                 CONF_RANGES: [
                     {CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "11:00"},
@@ -175,7 +175,7 @@ async def test_sensor_setup_happy_windows_entry_multiple_windows(
             CONF_WINDOWS: [
                 {
                     CONF_WINDOW_NAME: "Peak",
-                    CONF_COST_PER_KWH: 0.2,
+                    CONF_IMPORT_RATE_PER_KWH: 0.2,
                     CONF_ENTITIES: ["sensor.today_load"],
                     CONF_RANGES: [
                         {
@@ -186,7 +186,7 @@ async def test_sensor_setup_happy_windows_entry_multiple_windows(
                 },
                 {
                     CONF_WINDOW_NAME: "Off-Peak",
-                    CONF_COST_PER_KWH: 0.1,
+                    CONF_IMPORT_RATE_PER_KWH: 0.1,
                     CONF_ENTITIES: ["sensor.today_load"],
                     CONF_RANGES: [
                         {
@@ -226,7 +226,7 @@ async def test_sensor_setup_happy_friendly_name_uses_window_and_source_entity(
             CONF_WINDOWS: [
                 {
                     CONF_WINDOW_NAME: "ZEROHERO",
-                    CONF_COST_PER_KWH: 0.2,
+                    CONF_IMPORT_RATE_PER_KWH: 0.2,
                     CONF_ENTITIES: ["sensor.today_load", "sensor.today_import"],
                     CONF_RANGES: [
                         {CONF_WINDOW_START: "09:00:00", CONF_WINDOW_END: "11:00:00"},

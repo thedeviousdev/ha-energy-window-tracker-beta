@@ -18,7 +18,8 @@
         "data": {
           "source_name": "Friendly name",
           "window_name": "Window name",
-          "cost_per_kwh": "Cost per kWh ($)",
+          "import_rate_per_kwh": "Import rate per kWh ($)",
+          "export_rate_per_kwh": "Export rate per kWh ($)",
           "start_1": "Start time #1",
           "end_1": "End time #1",
           "start_2": "Start time #2",
@@ -47,7 +48,8 @@
         "description": "Name the window and define the start and end times.",
         "data": {
           "window_name": "Window name",
-          "cost_per_kwh": "Cost per kWh ($)",
+          "import_rate_per_kwh": "Import rate per kWh ($)",
+          "export_rate_per_kwh": "Export rate per kWh ($)",
           "start_1": "Start time #1",
           "end_1": "End time #1",
           "start_2": "Start time #2",
@@ -76,7 +78,8 @@
         "description": "To remove a time range, set its start time equal to or later than its end time. If you clear all ranges, the window will be removed.",
         "data": {
           "window_name": "Window name",
-          "cost_per_kwh": "Cost per kWh ($)",
+          "import_rate_per_kwh": "Import rate per kWh ($)",
+          "export_rate_per_kwh": "Export rate per kWh ($)",
           "start_1": "Start time #1",
           "end_1": "End time #1",
           "start_2": "Start time #2",
@@ -106,7 +109,8 @@
         "description": "Define a window and one or more time ranges.",
         "data": {
           "window_name": "Window name",
-          "cost_per_kwh": "Cost per kWh ($)",
+          "import_rate_per_kwh": "Import rate per kWh ($)",
+          "export_rate_per_kwh": "Export rate per kWh ($)",
           "start_1": "Start time #1",
           "end_1": "End time #1",
           "start_2": "Start time #2",
@@ -216,7 +220,8 @@
         "description": "Name the window and define the start and end times.",
         "data": {
           "window_name": "Window name",
-          "cost_per_kwh": "Cost per kWh ($)",
+          "import_rate_per_kwh": "Import rate per kWh ($)",
+          "export_rate_per_kwh": "Export rate per kWh ($)",
           "start_1": "Start time #1",
           "end_1": "End time #1",
           "start_2": "Start time #2",
@@ -246,7 +251,8 @@
         "description": "To remove a range, set its start time equal to or later than its end time. If all ranges are removed, the window will be deleted after confirmation.",
         "data": {
           "window_name": "Window name",
-          "cost_per_kwh": "Cost per kWh ($)",
+          "import_rate_per_kwh": "Import rate per kWh ($)",
+          "export_rate_per_kwh": "Export rate per kWh ($)",
           "start_1": "Start time #1",
           "end_1": "End time #1",
           "start_2": "Start time #2",

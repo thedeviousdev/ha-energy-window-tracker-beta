@@ -35,8 +35,9 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.translation import async_get_translations
 
 from .const import (
-    CONF_COST_PER_KWH,
     CONF_ENTITIES,
+    CONF_EXPORT_RATE_PER_KWH,
+    CONF_IMPORT_RATE_PER_KWH,
     CONF_NAME,
     CONF_RANGES,
     CONF_SOURCE_ENTITY,
@@ -257,7 +258,7 @@ def _get_entity_friendly_name(
 
 
 def _normalize_windows_for_schema(raw: Any) -> list[dict[str, Any]]:
-    """Return a list of dicts with name/start/end/cost_per_kwh for schema defaults. Never raises."""
+    """Return a list of dicts with name/start/end/import_rate_per_kwh for schema defaults. Never raises."""
     out: list[dict[str, Any]] = []
     if not isinstance(raw, list):
         return out
@@ -265,9 +266,18 @@ def _normalize_windows_for_schema(raw: Any) -> list[dict[str, Any]]:
         if not isinstance(item, dict):
             continue
         cost = 0.0
-        if CONF_COST_PER_KWH in item and item[CONF_COST_PER_KWH] is not None:
+        export_rate = 0.0
+        if CONF_IMPORT_RATE_PER_KWH in item and item[CONF_IMPORT_RATE_PER_KWH] is not None:
             try:
-                cost = max(0.0, float(item[CONF_COST_PER_KWH]))
+                cost = max(0.0, float(item[CONF_IMPORT_RATE_PER_KWH]))
+            except (TypeError, ValueError):
+                pass
+        if (
+            CONF_EXPORT_RATE_PER_KWH in item
+            and item[CONF_EXPORT_RATE_PER_KWH] is not None
+        ):
+            try:
+                export_rate = max(0.0, float(item[CONF_EXPORT_RATE_PER_KWH]))
             except (TypeError, ValueError):
                 pass
         out.append(
@@ -275,7 +285,8 @@ def _normalize_windows_for_schema(raw: Any) -> list[dict[str, Any]]:
                 CONF_WINDOW_NAME: str(item.get(CONF_WINDOW_NAME) or "")[:200],
                 CONF_WINDOW_START: _time_to_str(item.get(CONF_WINDOW_START)),
                 CONF_WINDOW_END: _time_to_str(item.get(CONF_WINDOW_END)),
-                CONF_COST_PER_KWH: cost,
+                CONF_IMPORT_RATE_PER_KWH: cost,
+                CONF_EXPORT_RATE_PER_KWH: export_rate,
             }
         )
     return out
@@ -289,7 +300,8 @@ def _flatten_runtime_windows_for_edit(raw_windows: Any) -> list[dict[str, Any]]:
     for item in raw_windows:
         if not isinstance(item, dict):
             continue
-        cost = _parse_cost(item.get(CONF_COST_PER_KWH))
+        cost = _parse_cost(item.get(CONF_IMPORT_RATE_PER_KWH))
+        export_rate = _parse_cost(item.get(CONF_EXPORT_RATE_PER_KWH))
         name = str(item.get(CONF_WINDOW_NAME) or "")[:200]
         ranges = item.get(CONF_RANGES) or []
         if not isinstance(ranges, list):
@@ -302,7 +314,8 @@ def _flatten_runtime_windows_for_edit(raw_windows: Any) -> list[dict[str, Any]]:
                     CONF_WINDOW_NAME: name,
                     CONF_WINDOW_START: _time_to_str(range_row.get(CONF_WINDOW_START)),
                     CONF_WINDOW_END: _time_to_str(range_row.get(CONF_WINDOW_END)),
-                    CONF_COST_PER_KWH: cost,
+                    CONF_IMPORT_RATE_PER_KWH: cost,
+                    CONF_EXPORT_RATE_PER_KWH: export_rate,
                 }
             )
     return out
@@ -381,7 +394,13 @@ async def _get_window_form_labels(
     except Exception:  # noqa: BLE001
         trans = {}
     labels: dict[str, str] = {}
-    for key in ("window_name", "cost_per_kwh", "add_another", "delete_this_window"):
+    for key in (
+        "window_name",
+        "import_rate_per_kwh",
+        "export_rate_per_kwh",
+        "add_another",
+        "delete_this_window",
+    ):
         k = _data_key(step_id, key)
         if k in trans:
             labels[key] = trans[k]
@@ -398,13 +417,14 @@ def _build_single_window_multi_range_schema(
     labels: dict[str, str],
     default_source_name: str | None,
     window_name: str,
-    cost_per_kwh: float,
+    import_rate_per_kwh: float,
     ranges: list[dict[str, str]],
     include_add_another: bool,
     include_delete: bool = False,
     include_range_delete: bool = False,
     num_slots: int | None = None,
     allow_empty_slots: bool = False,
+    export_rate_per_kwh: float = 0.0,
 ) -> vol.Schema:
     """Build schema: one window name, one cost, then start/end for start_1/end_1, start_2/end_2, ...
     Labels: "Start time #1", "End time #1", "Start time #2", etc. (built in _get_window_form_labels).
@@ -423,9 +443,18 @@ def _build_single_window_multi_range_schema(
     ] = str
     schema_dict[
         vol.Optional(
-            CONF_COST_PER_KWH,
-            default=cost_per_kwh,
-            description=labels.get("cost_per_kwh"),
+            CONF_IMPORT_RATE_PER_KWH,
+            default=import_rate_per_kwh,
+            description=labels.get("import_rate_per_kwh"),
+        )
+    ] = selector.NumberSelector(
+        selector.NumberSelectorConfig(min=0, max=100, step=0.001, mode="box")
+    )
+    schema_dict[
+        vol.Optional(
+            CONF_EXPORT_RATE_PER_KWH,
+            default=export_rate_per_kwh,
+            description=labels.get("export_rate_per_kwh"),
         )
     ] = selector.NumberSelector(
         selector.NumberSelectorConfig(min=0, max=100, step=0.001, mode="box")
@@ -445,11 +474,12 @@ def _build_single_window_multi_range_schema(
             e_def = None if allow_empty_slots else _time_to_str(DEFAULT_WINDOW_END)
         start_desc = labels.get(sk) or "Start time"
         end_desc = labels.get(ek) or "End time"
+        time_field_schema = vol.Any(None, _TIME_SELECTOR) if allow_empty_slots else _TIME_SELECTOR
         schema_dict[vol.Optional(sk, default=s_def, description=start_desc)] = (
-            _TIME_SELECTOR
+            time_field_schema
         )
         schema_dict[vol.Optional(ek, default=e_def, description=end_desc)] = (
-            _TIME_SELECTOR
+            time_field_schema
         )
         if include_range_delete:
             schema_dict[vol.Optional(f"delete_range_{idx}", default=False)] = bool
@@ -472,19 +502,25 @@ def _build_single_window_multi_range_schema(
 
 def _collect_ranges_from_single_window_form(
     data: dict[str, Any], num_ranges: int
-) -> tuple[str, float, list[tuple[str, str]]]:
-    """From form with window_name, cost_per_kwh, start_1/end_1, start_2/end_2, ... return (name, cost, [(start,end), ...])."""
+) -> tuple[str, float, float, list[tuple[str, str]]]:
+    """From form return (name, import_rate, export_rate, [(start,end), ...])."""
     name = (data.get("window_name") or data.get("name") or "").strip()
-    cost = _parse_cost(data.get(CONF_COST_PER_KWH))
+    cost = _parse_cost(data.get(CONF_IMPORT_RATE_PER_KWH))
+    export_rate = _parse_cost(data.get(CONF_EXPORT_RATE_PER_KWH))
     out: list[tuple[str, str]] = []
     for idx in range(1, num_ranges + 1):
         if data.get(f"delete_range_{idx}"):
             continue
-        start = _time_to_str(data.get(f"start_{idx}") or "00:00")
-        end = _time_to_str(data.get(f"end_{idx}") or "00:00")
+        start_raw = data.get(f"start_{idx}")
+        end_raw = data.get(f"end_{idx}")
+        # Clearing one or both time fields means "remove this range".
+        if start_raw in (None, "", [], {}) or end_raw in (None, "", [], {}):
+            continue
+        start = _time_to_str(start_raw)
+        end = _time_to_str(end_raw)
         if start < end:
             out.append((start, end))
-    return name, cost, out
+    return name, cost, export_rate, out
 
 
 def _validate_ranges_chronological(ranges: list[tuple[str, str]]) -> str | None:
@@ -498,7 +534,7 @@ def _validate_ranges_chronological(ranges: list[tuple[str, str]]) -> str | None:
 
 
 def _parse_cost(v: Any) -> float:
-    """Parse cost_per_kwh from user input; return 0 if missing or invalid."""
+    """Parse import_rate_per_kwh from user input; return 0 if missing or invalid."""
     if v is None:
         return 0.0
     try:
@@ -517,12 +553,12 @@ def _collect_windows_from_input(
             start = _time_to_str(data.get("start") or "00:00")
             end = _time_to_str(data.get("end") or "00:00")
             name = (data.get("name") or "").strip()
-            cost = _parse_cost(data.get(CONF_COST_PER_KWH))
+            cost = _parse_cost(data.get(CONF_IMPORT_RATE_PER_KWH))
         else:
             start = _time_to_str(data.get(f"w{i}_start", "00:00"))
             end = _time_to_str(data.get(f"w{i}_end", "00:00"))
             name = (data.get(f"w{i}_name") or "").strip()
-            cost = _parse_cost(data.get(f"w{i}_{CONF_COST_PER_KWH}"))
+            cost = _parse_cost(data.get(f"w{i}_{CONF_IMPORT_RATE_PER_KWH}"))
         if start >= end:
             continue
         windows.append(
@@ -530,7 +566,7 @@ def _collect_windows_from_input(
                 CONF_WINDOW_START: start,
                 CONF_WINDOW_END: end,
                 CONF_WINDOW_NAME: name or None,
-                CONF_COST_PER_KWH: cost,
+                CONF_IMPORT_RATE_PER_KWH: cost,
             }
         )
     return windows
@@ -548,7 +584,7 @@ def _get_window_rows_from_input(
                     CONF_WINDOW_NAME: data.get("name") or "",
                     CONF_WINDOW_START: _time_to_str(data.get("start") or "00:00"),
                     CONF_WINDOW_END: _time_to_str(data.get("end") or "00:00"),
-                    CONF_COST_PER_KWH: _parse_cost(data.get(CONF_COST_PER_KWH)),
+                    CONF_IMPORT_RATE_PER_KWH: _parse_cost(data.get(CONF_IMPORT_RATE_PER_KWH)),
                 }
             )
         else:
@@ -557,8 +593,8 @@ def _get_window_rows_from_input(
                     CONF_WINDOW_NAME: data.get(f"w{i}_name") or "",
                     CONF_WINDOW_START: _time_to_str(data.get(f"w{i}_start", "00:00")),
                     CONF_WINDOW_END: _time_to_str(data.get(f"w{i}_end", "00:00")),
-                    CONF_COST_PER_KWH: _parse_cost(
-                        data.get(f"w{i}_{CONF_COST_PER_KWH}")
+                    CONF_IMPORT_RATE_PER_KWH: _parse_cost(
+                        data.get(f"w{i}_{CONF_IMPORT_RATE_PER_KWH}")
                     ),
                 }
             )
@@ -579,14 +615,17 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._edit_window_name: str | None = None
         self._initial_window_name: str = ""
         self._initial_window_cost: float = 0.0
+        self._initial_window_export_rate: float = 0.0
         self._initial_ranges: list[dict[str, str]] = []
         self._pending_add_name: str = ""
         self._pending_add_cost: float = 0.0
+        self._pending_add_export_rate: float = 0.0
         self._pending_add_ranges: list[dict[str, str]] = []
         # Setup state for the "windows-based" flow (define window ranges, then pick entities).
         self._setup_windows: list[dict[str, Any]] = []
         self._setup_name: str = ""
         self._setup_cost: float = 0.0
+        self._setup_export_rate: float = 0.0
         self._setup_ranges: list[dict[str, str]] = []
         self._pending_setup_entry_id: str | None = None
 
@@ -642,7 +681,8 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         target_window_name: str,
         new_window_name: str | None,
         ranges_list: list[tuple[str, str]],
-        cost_per_kwh: float,
+        import_rate_per_kwh: float,
+        export_rate_per_kwh: float,
     ) -> None:
         """Update a window group in runtime setup entry while preserving entities."""
         existing_entry = self._get_runtime_setup_entry()
@@ -663,7 +703,8 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 continue
             updated_window = dict(window)
             updated_window[CONF_WINDOW_NAME] = new_window_name
-            updated_window[CONF_COST_PER_KWH] = cost_per_kwh
+            updated_window[CONF_IMPORT_RATE_PER_KWH] = import_rate_per_kwh
+            updated_window[CONF_EXPORT_RATE_PER_KWH] = export_rate_per_kwh
             updated_window[CONF_RANGES] = [
                 {CONF_WINDOW_START: start, CONF_WINDOW_END: end}
                 for start, end in ranges_list
@@ -723,7 +764,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     labels,
                     None,
                     (user_input.get("window_name") or "").strip(),
-                    _parse_cost(user_input.get(CONF_COST_PER_KWH)),
+                    _parse_cost(user_input.get(CONF_IMPORT_RATE_PER_KWH)),
                     self._setup_ranges,
                     include_add_another=True,
                     include_delete=False,
@@ -739,7 +780,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if self._setup_ranges
                 else max(num_ranges, 1)
             )
-            w_name, cost, ranges = _collect_ranges_from_single_window_form(
+            w_name, cost, export_rate, ranges = _collect_ranges_from_single_window_form(
                 user_input, n_collect
             )
             if not (w_name or "").strip():
@@ -757,6 +798,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     w_name or "",
                     cost,
                     [{"start": s, "end": e} for s, e in ranges] or self._setup_ranges,
+                    export_rate_per_kwh=export_rate,
                     include_add_another=True,
                     include_delete=False,
                     num_slots=n_collect,
@@ -768,6 +810,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             self._setup_name = w_name or ""
             self._setup_cost = cost
+            self._setup_export_rate = export_rate
             self._setup_ranges = [{"start": s, "end": e} for s, e in ranges]
             if user_input.get("add_another"):
                 schema = _build_single_window_multi_range_schema(
@@ -776,6 +819,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._setup_name,
                     self._setup_cost,
                     self._setup_ranges,
+                    export_rate_per_kwh=self._setup_export_rate,
                     include_add_another=True,
                     include_delete=False,
                     num_slots=len(self._setup_ranges) + 1,
@@ -792,6 +836,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._setup_name,
             self._setup_cost,
             self._setup_ranges,
+            export_rate_per_kwh=self._setup_export_rate,
             include_add_another=True,
             include_delete=False,
             num_slots=num_ranges,
@@ -831,7 +876,8 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 self._setup_windows.append(
                     {
                         CONF_WINDOW_NAME: configured_window_name,
-                        CONF_COST_PER_KWH: self._setup_cost,
+                        CONF_IMPORT_RATE_PER_KWH: self._setup_cost,
+                        CONF_EXPORT_RATE_PER_KWH: self._setup_export_rate,
                         CONF_RANGES: list(self._setup_ranges),
                         CONF_ENTITIES: [entity_id],
                     }
@@ -971,7 +1017,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     err_labels,
                     user_input.get("source_name") or default_name,
                     (user_input.get("window_name") or "").strip(),
-                    _parse_cost(user_input.get(CONF_COST_PER_KWH)),
+                    _parse_cost(user_input.get(CONF_IMPORT_RATE_PER_KWH)),
                     ranges_for_form,
                     include_add_another=True,
                     include_delete=False,
@@ -986,7 +1032,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if self._initial_ranges
                 else max(num_ranges, 1)
             )
-            w_name, cost, ranges = _collect_ranges_from_single_window_form(
+            w_name, cost, export_rate, ranges = _collect_ranges_from_single_window_form(
                 user_input, num_ranges_for_collect
             )
             if not (w_name or "").strip():
@@ -1088,6 +1134,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 self._initial_window_name = w_name or ""
                 self._initial_window_cost = cost
+                self._initial_window_export_rate = export_rate
                 self._initial_ranges = [{"start": s, "end": e} for s, e in ranges]
                 num_ranges = len(self._initial_ranges) + 1
                 labels = await _get_window_form_labels(
@@ -1099,6 +1146,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._initial_window_name,
                     self._initial_window_cost,
                     self._initial_ranges,
+                    export_rate_per_kwh=self._initial_window_export_rate,
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
@@ -1114,7 +1162,8 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     CONF_WINDOW_NAME: w_name or None,
                     CONF_WINDOW_START: s,
                     CONF_WINDOW_END: e,
-                    CONF_COST_PER_KWH: cost,
+                    CONF_IMPORT_RATE_PER_KWH: cost,
+                    CONF_EXPORT_RATE_PER_KWH: export_rate,
                 }
                 for s, e in ranges
             ]
@@ -1150,6 +1199,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._initial_window_name,
             self._initial_window_cost,
             self._initial_ranges,
+            export_rate_per_kwh=self._initial_window_export_rate,
             include_add_another=True,
             include_delete=False,
             num_slots=num_ranges,
@@ -1250,7 +1300,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     labels,
                     None,
                     (user_input.get("window_name") or "").strip(),
-                    _parse_cost(user_input.get(CONF_COST_PER_KWH)),
+                    _parse_cost(user_input.get(CONF_IMPORT_RATE_PER_KWH)),
                     ranges_for_form,
                     include_add_another=True,
                     include_delete=False,
@@ -1259,7 +1309,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return self.async_show_form(
                     step_id="add_window", data_schema=schema, errors=time_errors
                 )
-            w_name, cost, ranges = _collect_ranges_from_single_window_form(
+            w_name, cost, export_rate, ranges = _collect_ranges_from_single_window_form(
                 user_input, num_ranges_for_collect
             )
             if not ranges:
@@ -1351,6 +1401,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 self._pending_add_name = w_name or ""
                 self._pending_add_cost = cost
+                self._pending_add_export_rate = export_rate
                 self._pending_add_ranges = [{"start": s, "end": e} for s, e in ranges]
                 num_ranges = len(self._pending_add_ranges) + 1
                 labels = await _get_window_form_labels(
@@ -1362,6 +1413,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._pending_add_name,
                     self._pending_add_cost,
                     self._pending_add_ranges,
+                    export_rate_per_kwh=self._pending_add_export_rate,
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
@@ -1376,12 +1428,14 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_WINDOW_NAME: name,
                         CONF_WINDOW_START: s,
                         CONF_WINDOW_END: e,
-                        CONF_COST_PER_KWH: cost,
+                        CONF_IMPORT_RATE_PER_KWH: cost,
+                        CONF_EXPORT_RATE_PER_KWH: export_rate,
                     }
                 )
             self._pending_add_ranges = []
             self._pending_add_name = ""
             self._pending_add_cost = 0.0
+            self._pending_add_export_rate = 0.0
             return await self.async_step_configure_menu(None)
         _MAIN_LOGGER.debug("config flow: showing form step_id=add_window")
         schema = _build_single_window_multi_range_schema(
@@ -1390,6 +1444,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._pending_add_name,
             self._pending_add_cost,
             self._pending_add_ranges,
+            export_rate_per_kwh=self._pending_add_export_rate,
             include_add_another=True,
             include_delete=False,
             num_slots=num_ranges,
@@ -1488,11 +1543,11 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         cost = 0.0
         if (
             same_name
-            and CONF_COST_PER_KWH in same_name[0]
-            and same_name[0][CONF_COST_PER_KWH] is not None
+            and CONF_IMPORT_RATE_PER_KWH in same_name[0]
+            and same_name[0][CONF_IMPORT_RATE_PER_KWH] is not None
         ):
             try:
-                cost = max(0.0, float(same_name[0][CONF_COST_PER_KWH]))
+                cost = max(0.0, float(same_name[0][CONF_IMPORT_RATE_PER_KWH]))
             except (TypeError, ValueError):
                 pass
 
@@ -1531,14 +1586,14 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     labels,
                     None,
                     (user_input.get("window_name") or edit_name or "").strip(),
-                    _parse_cost(user_input.get(CONF_COST_PER_KWH)),
+                    _parse_cost(user_input.get(CONF_IMPORT_RATE_PER_KWH)),
                     ranges_for_form,
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
                 )
                 return _show_edit_form(schema, time_errors)
-            w_name, cost_val, ranges_list = _collect_ranges_from_single_window_form(
+            w_name, cost_val, export_rate_val, ranges_list = _collect_ranges_from_single_window_form(
                 user_input, num_ranges
             )
             if not (w_name or "").strip():
@@ -1660,14 +1715,20 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 return _show_edit_form(schema)
             name = (w_name or "").strip() or None
             new_windows = _replace_window_group_preserve_order(
-                windows, raw_to_replace, name, ranges_list, cost_val
+                windows,
+                raw_to_replace,
+                name,
+                ranges_list,
+                cost_val,
+                export_rate_val,
             )
             if self._is_runtime_setup_mode():
                 await self._update_runtime_setup_windows_group(
                     target_window_name=raw_to_replace,
                     new_window_name=name,
                     ranges_list=ranges_list,
-                    cost_per_kwh=cost_val,
+                    import_rate_per_kwh=cost_val,
+                    export_rate_per_kwh=export_rate_val,
                 )
             else:
                 await self._set_active_windows_for_configure(new_windows)
@@ -1824,8 +1885,8 @@ def _get_sources_from_entry(entry: config_entries.ConfigEntry) -> list[dict[str,
         name = (w.get(CONF_WINDOW_NAME) or "").strip() or f"Window {i + 1}"
         cost = 0.0
         try:
-            if w.get(CONF_COST_PER_KWH) is not None:
-                cost = max(0.0, float(w.get(CONF_COST_PER_KWH)))
+            if w.get(CONF_IMPORT_RATE_PER_KWH) is not None:
+                cost = max(0.0, float(w.get(CONF_IMPORT_RATE_PER_KWH)))
         except (TypeError, ValueError):
             cost = 0.0
 
@@ -1842,7 +1903,7 @@ def _get_sources_from_entry(entry: config_entries.ConfigEntry) -> list[dict[str,
                     CONF_WINDOW_NAME: name,
                     CONF_WINDOW_START: start,
                     CONF_WINDOW_END: end,
-                    CONF_COST_PER_KWH: cost,
+                    CONF_IMPORT_RATE_PER_KWH: cost,
                 }
             )
 
@@ -1894,7 +1955,7 @@ def _sources_to_windows(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
             windows.append(
                 {
                     CONF_WINDOW_NAME: window.get(CONF_WINDOW_NAME),
-                    CONF_COST_PER_KWH: _parse_cost(window.get(CONF_COST_PER_KWH)),
+                    CONF_IMPORT_RATE_PER_KWH: _parse_cost(window.get(CONF_IMPORT_RATE_PER_KWH)),
                     CONF_ENTITIES: [source_entity],
                     CONF_RANGES: [
                         {
@@ -2058,7 +2119,8 @@ def _replace_window_group_preserve_order(
     raw_to_replace: str,
     new_name: str | None,
     ranges_list: list[tuple[str, str]],
-    cost_per_kwh: float,
+    import_rate_per_kwh: float,
+    export_rate_per_kwh: float,
 ) -> list[dict[str, Any]]:
     """Replace all windows matching raw_to_replace, preserving the group's position."""
     target = (raw_to_replace or "").strip()
@@ -2078,7 +2140,8 @@ def _replace_window_group_preserve_order(
                     CONF_WINDOW_NAME: new_name,
                     CONF_WINDOW_START: s,
                     CONF_WINDOW_END: e,
-                    CONF_COST_PER_KWH: cost_per_kwh,
+                    CONF_IMPORT_RATE_PER_KWH: import_rate_per_kwh,
+                    CONF_EXPORT_RATE_PER_KWH: export_rate_per_kwh,
                 }
             )
         replaced = True
@@ -2090,7 +2153,8 @@ def _replace_window_group_preserve_order(
                     CONF_WINDOW_NAME: new_name,
                     CONF_WINDOW_START: s,
                     CONF_WINDOW_END: e,
-                    CONF_COST_PER_KWH: cost_per_kwh,
+                    CONF_IMPORT_RATE_PER_KWH: import_rate_per_kwh,
+                    CONF_EXPORT_RATE_PER_KWH: export_rate_per_kwh,
                 }
             )
     return out
@@ -2187,9 +2251,9 @@ def _build_single_window_schema(
     start_val = _time_to_str(w.get(CONF_WINDOW_START) or DEFAULT_WINDOW_START)
     end_val = _time_to_str(w.get(CONF_WINDOW_END) or DEFAULT_WINDOW_END)
     cost_val = 0.0
-    if CONF_COST_PER_KWH in w and w[CONF_COST_PER_KWH] is not None:
+    if CONF_IMPORT_RATE_PER_KWH in w and w[CONF_IMPORT_RATE_PER_KWH] is not None:
         try:
-            cost_val = max(0.0, float(w[CONF_COST_PER_KWH]))
+            cost_val = max(0.0, float(w[CONF_IMPORT_RATE_PER_KWH]))
         except (TypeError, ValueError):
             pass
     schema_dict: dict[Any, Any] = {
@@ -2197,7 +2261,7 @@ def _build_single_window_schema(
         vol.Optional("start", default=start_val): _TIME_SELECTOR,
         vol.Optional("end", default=end_val): _TIME_SELECTOR,
         vol.Optional(
-            CONF_COST_PER_KWH,
+            CONF_IMPORT_RATE_PER_KWH,
             default=cost_val,
         ): selector.NumberSelector(
             selector.NumberSelectorConfig(min=0, max=100, step=0.001, mode="box")
@@ -2661,7 +2725,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     labels,
                     None,
                     (user_input.get("window_name") or "").strip(),
-                    _parse_cost(user_input.get(CONF_COST_PER_KWH)),
+                    _parse_cost(user_input.get(CONF_IMPORT_RATE_PER_KWH)),
                     ranges_for_form,
                     include_add_another=True,
                     include_delete=False,
@@ -2670,7 +2734,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 return self.async_show_form(
                     step_id="add_window", data_schema=schema, errors=time_errors
                 )
-            w_name, cost, ranges_list = _collect_ranges_from_single_window_form(
+            w_name, cost, export_rate, ranges_list = _collect_ranges_from_single_window_form(
                 user_input, num_ranges
             )
             if not (w_name or "").strip():
@@ -2808,7 +2872,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                         CONF_WINDOW_START: s,
                         CONF_WINDOW_END: e,
                         CONF_WINDOW_NAME: name,
-                        CONF_COST_PER_KWH: cost,
+                        CONF_IMPORT_RATE_PER_KWH: cost,
                     }
                 )
             current_name = src.get(CONF_NAME) or None
@@ -2878,11 +2942,11 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
         cost = 0.0
         if (
             same_name
-            and CONF_COST_PER_KWH in same_name[0]
-            and same_name[0][CONF_COST_PER_KWH] is not None
+            and CONF_IMPORT_RATE_PER_KWH in same_name[0]
+            and same_name[0][CONF_IMPORT_RATE_PER_KWH] is not None
         ):
             try:
-                cost = max(0.0, float(same_name[0][CONF_COST_PER_KWH]))
+                cost = max(0.0, float(same_name[0][CONF_IMPORT_RATE_PER_KWH]))
             except (TypeError, ValueError):
                 pass
 
@@ -2923,7 +2987,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     err_labels,
                     None,
                     (user_input.get("window_name") or edit_name or "").strip(),
-                    _parse_cost(user_input.get(CONF_COST_PER_KWH)),
+                    _parse_cost(user_input.get(CONF_IMPORT_RATE_PER_KWH)),
                     ranges_for_form,
                     include_add_another=True,
                     include_delete=False,
@@ -2932,7 +2996,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     num_slots=num_ranges_for_collect,
                 )
                 return _show_edit_form(schema, time_errors)
-            w_name, cost_val, ranges_list = _collect_ranges_from_single_window_form(
+            w_name, cost_val, export_rate_val, ranges_list = _collect_ranges_from_single_window_form(
                 user_input, num_ranges_for_collect
             )
             if not (w_name or "").strip():
@@ -3067,7 +3131,12 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 )
                 if has_target_window:
                     src_windows = _replace_window_group_preserve_order(
-                        src_windows, raw_to_replace, name, ranges_list, cost_val
+                        src_windows,
+                        raw_to_replace,
+                        name,
+                        ranges_list,
+                        cost_val,
+                        export_rate_val,
                     )
                 new_sources.append(
                     {
