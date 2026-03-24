@@ -19,9 +19,7 @@ from homeassistant.util import dt as dt_util
 from custom_components.energy_window_tracker_beta.const import (
     CONF_ENTITIES,
     CONF_IMPORT_RATE_PER_KWH,
-    CONF_NAME,
-    CONF_SOURCE_ENTITY,
-    CONF_SOURCES,
+    CONF_RANGES,
     CONF_WINDOW_END,
     CONF_WINDOW_NAME,
     CONF_WINDOW_START,
@@ -304,16 +302,15 @@ async def test_sensor_cost_calc_unhappy_fail_logging(
         domain=DOMAIN,
         title="CostCalcFail",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: [
                 {
-                    CONF_SOURCE_ENTITY: "sensor.today_load",
-                    CONF_NAME: "Energy",
-                    CONF_WINDOWS: [
+                    CONF_WINDOW_NAME: "Peak",
+                    CONF_IMPORT_RATE_PER_KWH: 0.15,
+                    CONF_ENTITIES: ["sensor.today_load"],
+                    CONF_RANGES: [
                         {
-                            CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "17:00",
-                            CONF_IMPORT_RATE_PER_KWH: 0.15,
                         }
                     ],
                 }

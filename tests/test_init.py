@@ -9,7 +9,7 @@ from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
-from custom_components.energy_window_tracker_beta.const import CONF_SOURCES, DOMAIN
+from custom_components.energy_window_tracker_beta.const import CONF_WINDOWS, DOMAIN
 
 
 @pytest.mark.asyncio
@@ -40,7 +40,7 @@ async def test_unload_unhappy_when_not_loaded_succeeds(hass: HomeAssistant) -> N
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="Never Setup",
-        data={CONF_SOURCES: []},
+        data={CONF_WINDOWS: []},
         options={},
         entry_id="never_setup_id",
     )

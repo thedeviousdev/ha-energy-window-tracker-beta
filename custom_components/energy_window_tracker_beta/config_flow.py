@@ -41,7 +41,6 @@ from .const import (
     CONF_NAME,
     CONF_RANGES,
     CONF_SOURCE_ENTITY,
-    CONF_SOURCES,
     CONF_WINDOW_END,
     CONF_WINDOW_NAME,
     CONF_WINDOW_START,
@@ -541,64 +540,6 @@ def _parse_cost(v: Any) -> float:
         return max(0.0, float(v))
     except (TypeError, ValueError):
         return 0.0
-
-
-def _collect_windows_from_input(
-    data: dict, num_rows: int, use_simple_keys: bool = False
-) -> list[dict[str, Any]]:
-    """Collect windows from form data for rows 0..num_rows-1. Same-day only (start < end); no overnight."""
-    windows = []
-    for i in range(num_rows):
-        if use_simple_keys and i == 0:
-            start = _time_to_str(data.get("start") or "00:00")
-            end = _time_to_str(data.get("end") or "00:00")
-            name = (data.get("name") or "").strip()
-            cost = _parse_cost(data.get(CONF_IMPORT_RATE_PER_KWH))
-        else:
-            start = _time_to_str(data.get(f"w{i}_start", "00:00"))
-            end = _time_to_str(data.get(f"w{i}_end", "00:00"))
-            name = (data.get(f"w{i}_name") or "").strip()
-            cost = _parse_cost(data.get(f"w{i}_{CONF_IMPORT_RATE_PER_KWH}"))
-        if start >= end:
-            continue
-        windows.append(
-            {
-                CONF_WINDOW_START: start,
-                CONF_WINDOW_END: end,
-                CONF_WINDOW_NAME: name or None,
-                CONF_IMPORT_RATE_PER_KWH: cost,
-            }
-        )
-    return windows
-
-
-def _get_window_rows_from_input(
-    data: dict, num_rows: int, use_simple_keys: bool = False
-) -> list[dict[str, Any]]:
-    """Get all row data from input for re-showing form after validation error."""
-    rows = []
-    for i in range(num_rows):
-        if use_simple_keys and i == 0:
-            rows.append(
-                {
-                    CONF_WINDOW_NAME: data.get("name") or "",
-                    CONF_WINDOW_START: _time_to_str(data.get("start") or "00:00"),
-                    CONF_WINDOW_END: _time_to_str(data.get("end") or "00:00"),
-                    CONF_IMPORT_RATE_PER_KWH: _parse_cost(data.get(CONF_IMPORT_RATE_PER_KWH)),
-                }
-            )
-        else:
-            rows.append(
-                {
-                    CONF_WINDOW_NAME: data.get(f"w{i}_name") or "",
-                    CONF_WINDOW_START: _time_to_str(data.get(f"w{i}_start", "00:00")),
-                    CONF_WINDOW_END: _time_to_str(data.get(f"w{i}_end", "00:00")),
-                    CONF_IMPORT_RATE_PER_KWH: _parse_cost(
-                        data.get(f"w{i}_{CONF_IMPORT_RATE_PER_KWH}")
-                    ),
-                }
-            )
-    return rows
 
 
 class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
@@ -1182,11 +1123,19 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             return self.async_create_entry(
                 title=entry_title,
                 data={
-                    CONF_SOURCES: [
+                    CONF_WINDOWS: [
                         {
-                            CONF_NAME: source_name,
-                            CONF_SOURCE_ENTITY: source_entity,
-                            CONF_WINDOWS: windows,
+                            CONF_WINDOW_NAME: w_name or None,
+                            CONF_IMPORT_RATE_PER_KWH: cost,
+                            CONF_EXPORT_RATE_PER_KWH: export_rate,
+                            CONF_ENTITIES: [source_entity],
+                            CONF_RANGES: [
+                                {
+                                    CONF_WINDOW_START: s,
+                                    CONF_WINDOW_END: e,
+                                }
+                                for s, e in ranges
+                            ],
                         }
                     ]
                 },
@@ -1222,11 +1171,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 "config flow step configure_menu: user selected next_step_id=%s",
                 next_step,
             )
-            if next_step == "done":
-                # Backward compatibility for stale frontend/menu state. "Done" is no
-                # longer a valid option in this menu because entry creation already
-                # happened after selecting entities.
-                return self._async_show_configure_menu()
             if next_step in ("add_window", "list_windows", "source_entity"):
                 return await getattr(self, f"async_step_{next_step}")(None)
         return self._async_show_configure_menu()
@@ -1255,9 +1199,10 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         defaults = await _get_config_defaults(self.hass)
         title = self._pending_entry_title or defaults["entry_title"]
         _MAIN_LOGGER.debug("config flow step done: creating entry title=%r", title)
+        windows = _sources_to_windows(self._pending_sources or [])
         return self.async_create_entry(
             title=title,
-            data={CONF_SOURCES: self._pending_sources or []},
+            data={CONF_WINDOWS: windows},
         )
 
     async def async_step_add_window(
@@ -2232,44 +2177,6 @@ def _build_source_entities_manage_schema(
             )
         }
     )
-
-
-def _get_start_end_from_input(user_input: dict[str, Any]) -> tuple[str, str]:
-    """Get start and end time strings from form input (keys 'start'/'end')."""
-    start = _time_to_str(user_input.get("start") or "00:00")
-    end = _time_to_str(user_input.get("end") or "00:00")
-    return start, end
-
-
-def _build_single_window_schema(
-    window: dict[str, Any] | None = None,
-    include_delete: bool = False,
-) -> vol.Schema:
-    """Build schema for add/edit single window. include_delete=True adds 'Delete this window' (edit only)."""
-    w = window or {}
-    name_val = str(w.get(CONF_WINDOW_NAME, ""))[:200]
-    start_val = _time_to_str(w.get(CONF_WINDOW_START) or DEFAULT_WINDOW_START)
-    end_val = _time_to_str(w.get(CONF_WINDOW_END) or DEFAULT_WINDOW_END)
-    cost_val = 0.0
-    if CONF_IMPORT_RATE_PER_KWH in w and w[CONF_IMPORT_RATE_PER_KWH] is not None:
-        try:
-            cost_val = max(0.0, float(w[CONF_IMPORT_RATE_PER_KWH]))
-        except (TypeError, ValueError):
-            pass
-    schema_dict: dict[Any, Any] = {
-        vol.Optional(CONF_WINDOW_NAME, default=name_val): str,
-        vol.Optional("start", default=start_val): _TIME_SELECTOR,
-        vol.Optional("end", default=end_val): _TIME_SELECTOR,
-        vol.Optional(
-            CONF_IMPORT_RATE_PER_KWH,
-            default=cost_val,
-        ): selector.NumberSelector(
-            selector.NumberSelectorConfig(min=0, max=100, step=0.001, mode="box")
-        ),
-    }
-    if include_delete:
-        schema_dict[vol.Optional("delete_this_window", default=False)] = bool
-    return vol.Schema(schema_dict)
 
 
 class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
