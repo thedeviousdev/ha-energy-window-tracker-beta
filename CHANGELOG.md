@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.53](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.52...v2.3.53) (2026-03-24)
+
+
+### Bug Fixes
+
+* **options-flow:** keep remaining entities when removing one source ([#32](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/32)) ([a015a90](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/a015a9002fd4dd580ee96943d20b4923d9a80f58))
+
 ## [2.3.52](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.51...v2.3.52) (2026-03-24)
 
 
