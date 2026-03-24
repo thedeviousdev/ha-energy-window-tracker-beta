@@ -12,10 +12,8 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.energy_window_tracker_beta.const import (
     CONF_COST_PER_KWH,
     CONF_ENTITIES,
-    CONF_NAME,
     CONF_RANGES,
     CONF_SOURCE_ENTITY,
-    CONF_SOURCES,
     CONF_WINDOW_END,
     CONF_WINDOW_NAME,
     CONF_WINDOW_START,
@@ -166,33 +164,37 @@ async def test_sensor_setup_unhappy_source_unavailable(
 
 
 @pytest.mark.asyncio
-async def test_sensor_setup_happy_legacy_entry_multiple_windows(
+async def test_sensor_setup_happy_windows_entry_multiple_windows(
     hass: HomeAssistant,
 ) -> None:
-    """[Happy] Legacy config with two named windows creates two sensors."""
+    """[Happy] Windows-based config with two named windows creates two sensors."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="Two Windows",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: [
                 {
-                    CONF_SOURCE_ENTITY: "sensor.today_load",
-                    CONF_NAME: "Energy",
-                    CONF_WINDOWS: [
+                    CONF_WINDOW_NAME: "Peak",
+                    CONF_COST_PER_KWH: 0.2,
+                    CONF_ENTITIES: ["sensor.today_load"],
+                    CONF_RANGES: [
                         {
-                            CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "12:00",
-                            CONF_COST_PER_KWH: 0.2,
-                        },
+                        }
+                    ],
+                },
+                {
+                    CONF_WINDOW_NAME: "Off-Peak",
+                    CONF_COST_PER_KWH: 0.1,
+                    CONF_ENTITIES: ["sensor.today_load"],
+                    CONF_RANGES: [
                         {
-                            CONF_WINDOW_NAME: "Off-Peak",
                             CONF_WINDOW_START: "12:00",
                             CONF_WINDOW_END: "17:00",
-                            CONF_COST_PER_KWH: 0.1,
-                        },
+                        }
                     ],
-                }
+                },
             ]
         },
         options={},

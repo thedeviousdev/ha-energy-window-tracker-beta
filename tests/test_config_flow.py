@@ -10,12 +10,15 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
+from custom_components.energy_window_tracker_beta.config_flow import (
+    _get_sources_from_entry,
+)
 from custom_components.energy_window_tracker_beta.const import (
     CONF_COST_PER_KWH,
     CONF_ENTITIES,
     CONF_NAME,
+    CONF_RANGES,
     CONF_SOURCE_ENTITY,
-    CONF_SOURCES,
     CONF_WINDOW_END,
     CONF_WINDOW_NAME,
     CONF_WINDOW_START,
@@ -23,6 +26,29 @@ from custom_components.energy_window_tracker_beta.const import (
     DOMAIN,
     source_slug_from_entity_id,
 )
+
+
+def _windows_from_sources(sources: list[dict]) -> list[dict]:
+    """Convert source-style test fixtures to canonical windows-based rows."""
+    windows: list[dict] = []
+    for source in sources:
+        entity_id = source.get(CONF_SOURCE_ENTITY)
+        source_windows = source.get(CONF_WINDOWS) or []
+        for window in source_windows:
+            windows.append(
+                {
+                    CONF_WINDOW_NAME: window.get(CONF_WINDOW_NAME),
+                    CONF_COST_PER_KWH: window.get(CONF_COST_PER_KWH, 0.0),
+                    CONF_ENTITIES: [entity_id] if entity_id else [],
+                    CONF_RANGES: [
+                        {
+                            CONF_WINDOW_START: window.get(CONF_WINDOW_START),
+                            CONF_WINDOW_END: window.get(CONF_WINDOW_END),
+                        }
+                    ],
+                }
+            )
+    return windows
 
 
 @pytest.mark.asyncio
@@ -177,7 +203,7 @@ async def test_options_source_entity_happy_allows_entity_used_by_other_entry(
         domain=DOMAIN,
         title="Other",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: _windows_from_sources([
                 {
                     CONF_SOURCE_ENTITY: "sensor.today_import",
                     CONF_NAME: "Other",
@@ -189,7 +215,7 @@ async def test_options_source_entity_happy_allows_entity_used_by_other_entry(
                         }
                     ],
                 }
-            ]
+            ])
         },
         options={},
         entry_id="other_entry",
@@ -300,10 +326,8 @@ async def test_options_add_window_happy_path_persists(
     assert result["step_id"] == "init"
     entry = hass.config_entries.async_get_entry(mock_legacy_config_entry.entry_id)
     assert entry is not None
-    source_rows = (
-        entry.options.get(CONF_SOURCES) or entry.data.get(CONF_SOURCES) or []
-    )[0]
-    windows = source_rows[CONF_WINDOWS]
+    sources = _get_sources_from_entry(entry)
+    windows = sources[0][CONF_WINDOWS]
     assert any(
         w.get(CONF_WINDOW_NAME) == "Off-Peak"
         and w.get(CONF_WINDOW_START) == "00:00:00"
@@ -371,7 +395,7 @@ async def test_options_edit_window_happy_preserves_other_sources(
         domain=DOMAIN,
         title="Energy Window Tracker (Beta)",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: _windows_from_sources([
                 {
                     CONF_SOURCE_ENTITY: "sensor.today_load",
                     CONF_NAME: "Load",
@@ -396,7 +420,7 @@ async def test_options_edit_window_happy_preserves_other_sources(
                         }
                     ],
                 },
-            ]
+            ])
         },
         options={},
         entry_id="legacy_multi_source_edit",
@@ -423,11 +447,7 @@ async def test_options_edit_window_happy_preserves_other_sources(
 
     saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
     assert saved_entry is not None
-    sources = (
-        saved_entry.options.get(CONF_SOURCES)
-        or saved_entry.data.get(CONF_SOURCES)
-        or []
-    )
+    sources = _get_sources_from_entry(saved_entry)
     assert len(sources) == 2
     by_entity = {
         src.get(CONF_SOURCE_ENTITY): src
@@ -454,7 +474,7 @@ async def test_options_edit_window_unhappy_rename_to_existing_name_rejected(
         domain=DOMAIN,
         title="Energy Window Tracker (Beta)",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: _windows_from_sources([
                 {
                     CONF_SOURCE_ENTITY: "sensor.today_load",
                     CONF_NAME: "Load",
@@ -473,7 +493,7 @@ async def test_options_edit_window_unhappy_rename_to_existing_name_rejected(
                         },
                     ],
                 }
-            ]
+            ])
         },
         options={},
         entry_id="legacy_duplicate_rename",
@@ -509,7 +529,7 @@ async def test_options_source_entity_happy_update_replaces_source_set(
         domain=DOMAIN,
         title="Energy Window Tracker (Beta)",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: _windows_from_sources([
                 {
                     CONF_SOURCE_ENTITY: "sensor.today_load",
                     CONF_NAME: "Load",
@@ -534,7 +554,7 @@ async def test_options_source_entity_happy_update_replaces_source_set(
                         }
                     ],
                 },
-            ]
+            ])
         },
         options={},
         entry_id="legacy_multi_source_update",
@@ -557,11 +577,7 @@ async def test_options_source_entity_happy_update_replaces_source_set(
 
     saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
     assert saved_entry is not None
-    sources = (
-        saved_entry.options.get(CONF_SOURCES)
-        or saved_entry.data.get(CONF_SOURCES)
-        or []
-    )
+    sources = _get_sources_from_entry(saved_entry)
     assert len(sources) == 1
     entities = {
         src.get(CONF_SOURCE_ENTITY)
@@ -580,7 +596,7 @@ async def test_options_source_entity_happy_remove_one_keeps_other_registry_entit
         domain=DOMAIN,
         title="Energy Window Tracker (Beta)",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: _windows_from_sources([
                 {
                     CONF_SOURCE_ENTITY: "sensor.today_load",
                     CONF_NAME: "Load",
@@ -605,7 +621,7 @@ async def test_options_source_entity_happy_remove_one_keeps_other_registry_entit
                         }
                     ],
                 },
-            ]
+            ])
         },
         options={},
         entry_id="remove_one_keeps_other",
@@ -646,11 +662,7 @@ async def test_options_source_entity_happy_remove_one_keeps_other_registry_entit
 
     saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
     assert saved_entry is not None
-    sources = (
-        saved_entry.options.get(CONF_SOURCES)
-        or saved_entry.data.get(CONF_SOURCES)
-        or []
-    )
+    sources = _get_sources_from_entry(saved_entry)
     persisted_entities = {
         src.get(CONF_SOURCE_ENTITY)
         for src in sources
@@ -703,9 +715,7 @@ async def test_options_edit_window_happy_windows_based_preserves_all_entities(
 
     saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
     assert saved_entry is not None
-    sources = (
-        saved_entry.options.get(CONF_SOURCES) or saved_entry.data.get(CONF_SOURCES) or []
-    )
+    sources = _get_sources_from_entry(saved_entry)
     entities = {
         src.get(CONF_SOURCE_ENTITY)
         for src in sources
@@ -723,7 +733,7 @@ async def test_options_add_window_unhappy_duplicate_name_in_other_source_rejecte
         domain=DOMAIN,
         title="Energy Window Tracker (Beta)",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: _windows_from_sources([
                 {
                     CONF_SOURCE_ENTITY: "sensor.today_load",
                     CONF_NAME: "Load",
@@ -748,7 +758,7 @@ async def test_options_add_window_unhappy_duplicate_name_in_other_source_rejecte
                         }
                     ],
                 },
-            ]
+            ])
         },
         options={},
         entry_id="duplicate_name_other_source",
@@ -836,7 +846,7 @@ async def test_options_edit_window_happy_delete_middle_range_preserves_flow(
         domain=DOMAIN,
         title="Energy Window Tracker (Beta)",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: _windows_from_sources([
                 {
                     CONF_SOURCE_ENTITY: "sensor.today_load",
                     CONF_NAME: "Load",
@@ -861,7 +871,7 @@ async def test_options_edit_window_happy_delete_middle_range_preserves_flow(
                         },
                     ],
                 }
-            ]
+            ])
         },
         options={},
         entry_id="legacy_middle_delete",
@@ -892,11 +902,7 @@ async def test_options_edit_window_happy_delete_middle_range_preserves_flow(
 
     saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
     assert saved_entry is not None
-    sources = (
-        saved_entry.options.get(CONF_SOURCES)
-        or saved_entry.data.get(CONF_SOURCES)
-        or []
-    )
+    sources = _get_sources_from_entry(saved_entry)
     assert len(sources) == 1
     windows = sources[0][CONF_WINDOWS]
     assert len(windows) == 2
@@ -915,7 +921,7 @@ async def test_options_edit_window_unhappy_delete_all_ranges_requires_confirmati
         domain=DOMAIN,
         title="Energy Window Tracker (Beta)",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: _windows_from_sources([
                 {
                     CONF_SOURCE_ENTITY: "sensor.today_load",
                     CONF_NAME: "Load",
@@ -928,7 +934,7 @@ async def test_options_edit_window_unhappy_delete_all_ranges_requires_confirmati
                         }
                     ],
                 }
-            ]
+            ])
         },
         options={},
         entry_id="legacy_confirm_delete",
@@ -963,7 +969,7 @@ async def test_options_edit_window_happy_delete_all_ranges_after_confirmation(
         domain=DOMAIN,
         title="Energy Window Tracker (Beta)",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: _windows_from_sources([
                 {
                     CONF_SOURCE_ENTITY: "sensor.today_load",
                     CONF_NAME: "Load",
@@ -976,7 +982,7 @@ async def test_options_edit_window_happy_delete_all_ranges_after_confirmation(
                         }
                     ],
                 }
-            ]
+            ])
         },
         options={},
         entry_id="legacy_confirm_delete_apply",
@@ -1006,13 +1012,8 @@ async def test_options_edit_window_happy_delete_all_ranges_after_confirmation(
 
     saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
     assert saved_entry is not None
-    sources = (
-        saved_entry.options.get(CONF_SOURCES)
-        or saved_entry.data.get(CONF_SOURCES)
-        or []
-    )
-    assert len(sources) == 1
-    assert sources[0][CONF_WINDOWS] == []
+    sources = _get_sources_from_entry(saved_entry)
+    assert sources == []
 
 
 @pytest.mark.asyncio
@@ -1024,7 +1025,7 @@ async def test_options_edit_window_happy_renaming_updates_entry_title(
         domain=DOMAIN,
         title="Energy Window Tracker (Beta)",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: _windows_from_sources([
                 {
                     CONF_SOURCE_ENTITY: "sensor.today_load",
                     CONF_NAME: "Load",
@@ -1037,7 +1038,7 @@ async def test_options_edit_window_happy_renaming_updates_entry_title(
                         }
                     ],
                 }
-            ]
+            ])
         },
         options={},
         entry_id="legacy_title_rename",
@@ -1094,11 +1095,7 @@ async def test_options_add_window_unhappy_duplicate_name_rejected_legacy_case(
 
     saved_entry = hass.config_entries.async_get_entry(mock_legacy_config_entry.entry_id)
     assert saved_entry is not None
-    sources = (
-        saved_entry.options.get(CONF_SOURCES)
-        or saved_entry.data.get(CONF_SOURCES)
-        or []
-    )
+    sources = _get_sources_from_entry(saved_entry)
     assert len(sources) == 1
     windows = sources[0][CONF_WINDOWS]
     peak_rows = [w for w in windows if w.get(CONF_WINDOW_NAME) == "Peak"]
@@ -1306,12 +1303,6 @@ async def test_config_list_windows_happy_loads_after_window_setup_finish(
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"next_step_id": "list_windows"}
-    )
-    assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "list_windows"
-
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {"window_index": "0"}
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
     assert result["step_id"] == "edit_window"
