@@ -462,24 +462,32 @@ def _build_single_window_multi_range_schema(
     for i in range(num_ranges):
         idx = i + 1
         sk, ek = f"start_{idx}", f"end_{idx}"
-        r = ranges[i] if i < len(ranges) else {}
-        if i < len(ranges):
-            s_def = _time_to_str(r.get("start") or DEFAULT_WINDOW_START)
-            e_def = _time_to_str(r.get("end") or DEFAULT_WINDOW_END)
+        time_field_schema = (
+            vol.Any(None, _TIME_SELECTOR) if allow_empty_slots else _TIME_SELECTOR
+        )
+        if allow_empty_slots:
+            # No Optional defaults: HA merges defaults into submitted user_input before the
+            # step runs, so cleared fields would otherwise reappear as previous times.
+            # Initial display uses add_suggested_values_to_schema (_apply_multi_range_time_suggestions).
+            # description must be dict or None here — add_suggested_values_to_schema calls .get on it.
+            schema_dict[vol.Optional(sk, description=None)] = time_field_schema
+            schema_dict[vol.Optional(ek, description=None)] = time_field_schema
         else:
-            # Placeholder slots should be truly empty when allow_empty_slots is enabled.
-            # That way, clearing an "extra" range does not accidentally keep a default range.
-            s_def = None if allow_empty_slots else _time_to_str(DEFAULT_WINDOW_START)
-            e_def = None if allow_empty_slots else _time_to_str(DEFAULT_WINDOW_END)
-        start_desc = labels.get(sk) or "Start time"
-        end_desc = labels.get(ek) or "End time"
-        time_field_schema = vol.Any(None, _TIME_SELECTOR) if allow_empty_slots else _TIME_SELECTOR
-        schema_dict[vol.Optional(sk, default=s_def, description=start_desc)] = (
-            time_field_schema
-        )
-        schema_dict[vol.Optional(ek, default=e_def, description=end_desc)] = (
-            time_field_schema
-        )
+            start_desc = labels.get(sk) or "Start time"
+            end_desc = labels.get(ek) or "End time"
+            r = ranges[i] if i < len(ranges) else {}
+            if i < len(ranges):
+                s_def = _time_to_str(r.get("start") or DEFAULT_WINDOW_START)
+                e_def = _time_to_str(r.get("end") or DEFAULT_WINDOW_END)
+            else:
+                s_def = _time_to_str(DEFAULT_WINDOW_START)
+                e_def = _time_to_str(DEFAULT_WINDOW_END)
+            schema_dict[vol.Optional(sk, default=s_def, description=start_desc)] = (
+                _TIME_SELECTOR
+            )
+            schema_dict[vol.Optional(ek, default=e_def, description=end_desc)] = (
+                _TIME_SELECTOR
+            )
         if include_range_delete:
             schema_dict[vol.Optional(f"delete_range_{idx}", default=False)] = bool
     if include_add_another:
@@ -497,6 +505,51 @@ def _build_single_window_multi_range_schema(
             )
         ] = bool
     return vol.Schema(schema_dict)
+
+
+def _time_suggested_values_for_slots(
+    ranges: list[dict[str, Any]],
+    num_slots: int,
+    *,
+    user_override: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Build suggested_value map for time fields when allow_empty_slots is enabled.
+
+    Home Assistant merges Optional field defaults into submitted user_input before the
+    step runs; cleared fields must omit keys so they are not replaced with old times.
+    When user_override is set (post-submit / error paths), a key missing from that dict
+    means the user cleared that field — do not fall back to ranges.
+    """
+    out: dict[str, Any] = {}
+    for i in range(num_slots):
+        sk, ek = f"start_{i + 1}", f"end_{i + 1}"
+        for key, rkey in ((sk, "start"), (ek, "end")):
+            if user_override is not None:
+                if key not in user_override:
+                    continue
+                val = user_override[key]
+                if val in (None, "", [], {}):
+                    continue
+                out[key] = val
+                continue
+            if i < len(ranges):
+                out[key] = _time_to_str(ranges[i].get(rkey) or "")
+    return out
+
+
+def _apply_multi_range_time_suggestions(
+    flow: data_entry_flow.FlowHandler,
+    schema: vol.Schema,
+    ranges: list[dict[str, Any]],
+    num_slots: int | None,
+    user_input: dict[str, Any] | None,
+) -> vol.Schema:
+    """Apply HA suggested values so empty-slot schemas need no Optional defaults."""
+    n = num_slots if num_slots is not None else max(1, len(ranges))
+    suggested = _time_suggested_values_for_slots(
+        ranges, n, user_override=user_input
+    )
+    return flow.add_suggested_values_to_schema(schema, suggested)
 
 
 def _collect_ranges_from_single_window_form(
@@ -712,6 +765,9 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, self._setup_ranges, num_ranges, user_input
+                )
                 return self.async_show_form(
                     step_id="window_setup", data_schema=schema, errors=time_errors
                 )
@@ -733,17 +789,23 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 if range_error:
                     errors["base"] = range_error
             if errors:
+                ranges_for_schema = (
+                    [{"start": s, "end": e} for s, e in ranges] or self._setup_ranges
+                )
                 schema = _build_single_window_multi_range_schema(
                     labels,
                     None,
                     w_name or "",
                     cost,
-                    [{"start": s, "end": e} for s, e in ranges] or self._setup_ranges,
+                    ranges_for_schema,
                     export_rate_per_kwh=export_rate,
                     include_add_another=True,
                     include_delete=False,
                     num_slots=n_collect,
                     allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, ranges_for_schema, n_collect, user_input
                 )
                 return self.async_show_form(
                     step_id="window_setup", data_schema=schema, errors=errors
@@ -754,6 +816,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._setup_export_rate = export_rate
             self._setup_ranges = [{"start": s, "end": e} for s, e in ranges]
             if user_input.get("add_another"):
+                n_slots = len(self._setup_ranges) + 1
                 schema = _build_single_window_multi_range_schema(
                     labels,
                     None,
@@ -763,8 +826,11 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     export_rate_per_kwh=self._setup_export_rate,
                     include_add_another=True,
                     include_delete=False,
-                    num_slots=len(self._setup_ranges) + 1,
+                    num_slots=n_slots,
                     allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, self._setup_ranges, n_slots, None
                 )
                 return self.async_show_form(
                     step_id="window_setup", data_schema=schema, errors={}
@@ -782,6 +848,9 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             include_delete=False,
             num_slots=num_ranges,
             allow_empty_slots=True,
+        )
+        schema = _apply_multi_range_time_suggestions(
+            self, schema, self._setup_ranges, num_ranges, None
         )
         return self.async_show_form(
             step_id="window_setup", data_schema=schema, errors=errors
@@ -1549,28 +1618,37 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, ranges_for_form, num_ranges, user_input
                 )
                 return _show_edit_form(schema, time_errors)
             w_name, cost_val, export_rate_val, ranges_list = _collect_ranges_from_single_window_form(
                 user_input, num_ranges
             )
             if not (w_name or "").strip():
+                ranges_for_form = [
+                    {
+                        "start": user_input.get(f"start_{i + 1}") or "00:00",
+                        "end": user_input.get(f"end_{i + 1}") or "00:00",
+                    }
+                    for i in range(num_ranges)
+                ]
                 schema = _build_single_window_multi_range_schema(
                     labels,
                     None,
                     "",
                     cost_val,
-                    [
-                        {
-                            "start": user_input.get(f"start_{i + 1}") or "00:00",
-                            "end": user_input.get(f"end_{i + 1}") or "00:00",
-                        }
-                        for i in range(num_ranges)
-                    ],
+                    ranges_for_form,
                     include_add_another=True,
                     export_rate_per_kwh=export_rate_val,
                     include_delete=False,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, ranges_for_form, num_ranges, user_input
                 )
                 return _show_edit_form(schema, {"base": "window_name_required"})
             if not ranges_list:
@@ -1581,21 +1659,26 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     if first_start >= first_end
                     else "at_least_one_window"
                 )
+                ranges_for_form = [
+                    {
+                        "start": user_input.get("start_1") or "00:00",
+                        "end": user_input.get("end_1") or "00:00",
+                    }
+                ]
                 schema = _build_single_window_multi_range_schema(
                     labels,
                     None,
                     w_name or "",
                     cost_val,
-                    [
-                        {
-                            "start": user_input.get("start_1") or "00:00",
-                            "end": user_input.get("end_1") or "00:00",
-                        }
-                    ],
+                    ranges_for_form,
                     include_add_another=True,
                     export_rate_per_kwh=export_rate_val,
                     include_delete=True,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, ranges_for_form, num_ranges, user_input
                 )
                 return _show_edit_form(schema, {"base": err})
             range_error = _validate_ranges_chronological(ranges_list)
@@ -1623,6 +1706,10 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, ranges_for_form, num_ranges, user_input
                 )
                 return _show_edit_form(schema, {"base": range_error})
             raw_to_replace = (same_name[0].get(CONF_WINDOW_NAME) or "").strip()
@@ -1647,6 +1734,10 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, ranges_for_form, num_ranges, None
                 )
                 return _show_edit_form(schema, {"base": "duplicate_window_name"})
             if user_input.get("add_another"):
@@ -1675,6 +1766,10 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, self._pending_add_ranges, num_ranges, None
                 )
                 return _show_edit_form(schema)
             name = (w_name or "").strip() or None
@@ -1708,6 +1803,10 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             include_add_another=True,
             include_delete=False,
             num_slots=num_ranges,
+            allow_empty_slots=True,
+        )
+        schema = _apply_multi_range_time_suggestions(
+            self, schema, ranges_data, num_ranges, None
         )
         return _show_edit_form(schema)
 
@@ -2667,6 +2766,10 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, ranges_for_form, num_ranges, user_input
                 )
                 return self.async_show_form(
                     step_id="add_window", data_schema=schema, errors=time_errors
@@ -2675,21 +2778,26 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 user_input, num_ranges
             )
             if not (w_name or "").strip():
+                ranges_for_form = [
+                    {
+                        "start": user_input.get(f"start_{i + 1}") or "00:00",
+                        "end": user_input.get(f"end_{i + 1}") or "00:00",
+                    }
+                    for i in range(num_ranges)
+                ]
                 schema = _build_single_window_multi_range_schema(
                     labels,
                     None,
                     "",
                     cost,
-                    [
-                        {
-                            "start": user_input.get(f"start_{i + 1}") or "00:00",
-                            "end": user_input.get(f"end_{i + 1}") or "00:00",
-                        }
-                        for i in range(num_ranges)
-                    ],
+                    ranges_for_form,
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, ranges_for_form, num_ranges, user_input
                 )
                 return self.async_show_form(
                     step_id="add_window",
@@ -2726,6 +2834,10 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, ranges_for_form, num_ranges, user_input
                 )
                 return self.async_show_form(
                     step_id="add_window", data_schema=schema, errors={"base": err}
@@ -2754,6 +2866,10 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, ranges_for_form, num_ranges, user_input
                 )
                 return self.async_show_form(
                     step_id="add_window",
@@ -2771,6 +2887,10 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, ranges_for_form, num_ranges, None
                 )
                 return self.async_show_form(
                     step_id="add_window",
@@ -2800,6 +2920,10 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
+                    allow_empty_slots=True,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, self._pending_add_ranges, num_ranges, None
                 )
                 return self.async_show_form(step_id="add_window", data_schema=schema)
             name = (w_name or "").strip() or None
@@ -2834,6 +2958,10 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             include_add_another=True,
             include_delete=False,
             num_slots=num_ranges,
+            allow_empty_slots=True,
+        )
+        schema = _apply_multi_range_time_suggestions(
+            self, schema, self._pending_add_ranges, num_ranges, None
         )
         return self.async_show_form(step_id="add_window", data_schema=schema)
 
@@ -2945,6 +3073,13 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     allow_empty_slots=True,
                     num_slots=num_ranges_for_collect,
                 )
+                schema = _apply_multi_range_time_suggestions(
+                    self,
+                    schema,
+                    ranges_for_form,
+                    num_ranges_for_collect,
+                    user_input,
+                )
                 return _show_edit_form(schema, time_errors)
             w_name, cost_val, export_rate_val, ranges_list = _collect_ranges_from_single_window_form(
                 user_input, num_ranges_for_collect
@@ -2956,24 +3091,32 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     "edit_window",
                     num_ranges=num_ranges_for_collect,
                 )
+                ranges_for_form = [
+                    {
+                        "start": user_input.get(f"start_{i + 1}") or "00:00",
+                        "end": user_input.get(f"end_{i + 1}") or "00:00",
+                    }
+                    for i in range(num_ranges_for_collect)
+                ]
                 schema = _build_single_window_multi_range_schema(
                     err_labels,
                     None,
                     "",
                     cost_val,
-                    [
-                        {
-                            "start": user_input.get(f"start_{i + 1}") or "00:00",
-                            "end": user_input.get(f"end_{i + 1}") or "00:00",
-                        }
-                        for i in range(num_ranges_for_collect)
-                    ],
+                    ranges_for_form,
                     include_add_another=True,
                     export_rate_per_kwh=export_rate_val,
                     include_delete=False,
                     include_range_delete=False,
                     allow_empty_slots=True,
                     num_slots=num_ranges_for_collect,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self,
+                    schema,
+                    ranges_for_form,
+                    num_ranges_for_collect,
+                    user_input,
                 )
                 return _show_edit_form(schema, {"base": "window_name_required"})
             if not ranges_list:
@@ -3014,6 +3157,13 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     allow_empty_slots=True,
                     num_slots=num_ranges_for_collect,
                 )
+                schema = _apply_multi_range_time_suggestions(
+                    self,
+                    schema,
+                    ranges_for_form,
+                    num_ranges_for_collect,
+                    user_input,
+                )
                 return _show_edit_form(schema, {"base": range_error})
             raw_to_replace = (same_name[0].get(CONF_WINDOW_NAME) or "").strip()
             candidate_name = (w_name or "").strip()
@@ -3040,6 +3190,13 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     include_range_delete=False,
                     allow_empty_slots=True,
                     num_slots=num_ranges_for_collect,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self,
+                    schema,
+                    ranges_for_form,
+                    num_ranges_for_collect,
+                    None,
                 )
                 return _show_edit_form(schema, {"base": "duplicate_window_name"})
             if user_input.get("add_another"):
@@ -3070,6 +3227,9 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     include_range_delete=False,
                     allow_empty_slots=True,
                     num_slots=num_ranges,
+                )
+                schema = _apply_multi_range_time_suggestions(
+                    self, schema, self._pending_add_ranges, num_ranges, None
                 )
                 return _show_edit_form(schema)
             name = (w_name or "").strip() or None
@@ -3128,5 +3288,8 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             include_range_delete=False,
             allow_empty_slots=True,
             num_slots=num_ranges,
+        )
+        schema = _apply_multi_range_time_suggestions(
+            self, schema, ranges_data, num_ranges, None
         )
         return _show_edit_form(schema)
