@@ -27,7 +27,8 @@ from homeassistant.helpers.storage import Store
 from homeassistant.util import dt as dt_util
 
 from .const import (
-    ATTR_COST,
+    ATTR_EXPORT_CREDIT,
+    ATTR_IMPORT_COST,
     ATTR_SOURCE_ENTITY,
     ATTR_STATUS,
     CONF_ENTITIES,
@@ -476,6 +477,12 @@ def _get_sources_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
                     cost = max(0.0, float(w.get(CONF_IMPORT_RATE_PER_KWH)))
             except (TypeError, ValueError):
                 cost = 0.0
+            export_rate = 0.0
+            try:
+                if w.get(CONF_EXPORT_RATE_PER_KWH) is not None:
+                    export_rate = max(0.0, float(w.get(CONF_EXPORT_RATE_PER_KWH)))
+            except (TypeError, ValueError):
+                export_rate = 0.0
             range_rows: list[dict[str, Any]] = []
             for r in ranges:
                 if not isinstance(r, dict):
@@ -490,6 +497,7 @@ def _get_sources_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
                         CONF_WINDOW_START: start,
                         CONF_WINDOW_END: end,
                         CONF_IMPORT_RATE_PER_KWH: cost,
+                        CONF_EXPORT_RATE_PER_KWH: export_rate,
                     }
                 )
             if not range_rows:
@@ -805,7 +813,8 @@ class WindowEnergySensor(RestoreSensor):
     def _update_value(self) -> None:
         total_value: float | None = None
         combined_status = "before_window"
-        total_cost = 0.0
+        total_import_cost = 0.0
+        total_export_credit = 0.0
         range_attrs: list[dict[str, str]] = []
         rates: list[float] = []
 
@@ -821,10 +830,20 @@ class WindowEnergySensor(RestoreSensor):
                     pass
             if r.import_rate_per_kwh > 0 and value is not None:
                 try:
-                    total_cost += round(float(value) * r.import_rate_per_kwh, 2)
+                    total_import_cost += round(float(value) * r.import_rate_per_kwh, 2)
                 except (TypeError, ValueError) as e:
                     _MAIN_LOGGER.debug(
-                        "sensor: _update_value - cost calc failed window=%r value=%r: %s",
+                        "sensor: _update_value - import cost calc failed window=%r value=%r: %s",
+                        r.name,
+                        value,
+                        e,
+                    )
+            if r.export_rate_per_kwh > 0 and value is not None:
+                try:
+                    total_export_credit += round(float(value) * r.export_rate_per_kwh, 2)
+                except (TypeError, ValueError) as e:
+                    _MAIN_LOGGER.debug(
+                        "sensor: _update_value - export credit calc failed window=%r value=%r: %s",
                         r.name,
                         value,
                         e,
@@ -855,8 +874,7 @@ class WindowEnergySensor(RestoreSensor):
         if cw := self._data._config_warnings_by_name.get(self._window_name):
             attrs["config_warnings"] = list(cw)
         if rates:
-            # Always expose cost when rate is configured so automations can track a running balance.
-            attrs[ATTR_COST] = round(total_cost, 2)
+            attrs[ATTR_IMPORT_COST] = round(total_import_cost, 2)
             uniq_rates = sorted({round(float(x), 6) for x in rates})
             attrs["import_rate_per_kwh"] = (
                 uniq_rates[0] if len(uniq_rates) == 1 else uniq_rates
@@ -868,6 +886,7 @@ class WindowEnergySensor(RestoreSensor):
             attrs["export_rate_per_kwh"] = (
                 export_rates[0] if len(export_rates) == 1 else export_rates
             )
+            attrs[ATTR_EXPORT_CREDIT] = round(total_export_credit, 2)
         self._attr_extra_state_attributes = attrs
         self._last_source_value = self._data.get_source_value()
         self._last_status = combined_status
