@@ -20,6 +20,7 @@ as well as start_time/end_time for these window steps.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import re
 import uuid
@@ -64,6 +65,34 @@ _MAIN_LOGGER = logging.getLogger("custom_components.energy_window_tracker_beta")
 _RE_HHMMSS = re.compile(r"^(\d{1,2}):(\d{2})(?::(\d{2}))?$")
 
 _TIME_SELECTOR = selector.TimeSelector()
+
+
+def _build_runtime_config_entry(
+    *,
+    title: str,
+    windows_data: list[dict[str, Any]],
+) -> config_entries.ConfigEntry:
+    """Build a ConfigEntry compatible with the installed HA signature."""
+    kwargs: dict[str, Any] = {
+        "version": EnergyWindowConfigFlow.VERSION,
+        "minor_version": 0,
+        "domain": DOMAIN,
+        "title": title,
+        "data": {CONF_WINDOWS: windows_data},
+        "source": config_entries.SOURCE_USER,
+        "options": {},
+        "entry_id": uuid.uuid4().hex,
+    }
+
+    sig = inspect.signature(config_entries.ConfigEntry)
+    if "unique_id" in sig.parameters:
+        kwargs["unique_id"] = None
+    if "discovery_keys" in sig.parameters:
+        kwargs["discovery_keys"] = {}
+    if "subentries_data" in sig.parameters:
+        kwargs["subentries_data"] = []
+
+    return config_entries.ConfigEntry(**kwargs)
 
 
 def _is_valid_time_value(time_value: Any) -> bool:
@@ -716,17 +745,11 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
             # Create and add the config entry immediately so sensors are set up right away,
             # then keep the flow open with a confirmation screen.
-            entry = config_entries.ConfigEntry(
-                version=self.VERSION,
-                minor_version=0,
-                domain=DOMAIN,
-                title=entry_title,
-                data={CONF_WINDOWS: self._setup_windows},
-                source=config_entries.SOURCE_USER,
-                options={},
-                entry_id=uuid.uuid4().hex,
-            )
             try:
+                entry = _build_runtime_config_entry(
+                    title=entry_title,
+                    windows_data=self._setup_windows,
+                )
                 await self.hass.config_entries.async_add(entry)
             except Exception:  # noqa: BLE001
                 _MAIN_LOGGER.exception(
