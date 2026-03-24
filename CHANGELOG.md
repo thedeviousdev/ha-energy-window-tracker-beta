@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.55](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.54...v2.3.55) (2026-03-24)
+
+
+### Bug Fixes
+
+* **flow:** correct edit modal title and multi-entity rename behavior ([#36](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/36)) ([a51fb8f](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/a51fb8fa028fa4755a9886ba03066bd17437af46))
+
 ## [2.3.54](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.53...v2.3.54) (2026-03-24)
 
 

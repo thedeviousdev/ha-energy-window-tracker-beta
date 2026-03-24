@@ -1487,8 +1487,6 @@ async def test_config_list_windows_happy_loads_after_window_setup_finish(
     assert "end_1" in schema_fields
     assert "start_2" not in schema_fields
     assert "end_2" not in schema_fields
-
-
 @pytest.mark.asyncio
 async def test_config_edit_window_happy_immediate_multi_range_shows_all_ranges(
     hass: HomeAssistant,
