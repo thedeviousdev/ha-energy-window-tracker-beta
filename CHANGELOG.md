@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.46](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.45...v2.3.46) (2026-03-23)
+
+
+### Bug Fixes
+
+* **ui:** clear-to-delete ranges + reduce log noise (schema hotfix) ([#14](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/14)) ([80ffb1b](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/80ffb1b90e7d65340b53bc7d4a330e94c853b301))
+
 ## [2.3.45](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.44...v2.3.45) (2026-03-23)
 
 
