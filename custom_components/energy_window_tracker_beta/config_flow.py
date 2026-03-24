@@ -1486,6 +1486,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             for w in same_name
         ]
         cost = 0.0
+        export_rate = 0.0
         if (
             same_name
             and CONF_IMPORT_RATE_PER_KWH in same_name[0]
@@ -1493,6 +1494,15 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         ):
             try:
                 cost = max(0.0, float(same_name[0][CONF_IMPORT_RATE_PER_KWH]))
+            except (TypeError, ValueError):
+                pass
+        if (
+            same_name
+            and CONF_EXPORT_RATE_PER_KWH in same_name[0]
+            and same_name[0][CONF_EXPORT_RATE_PER_KWH] is not None
+        ):
+            try:
+                export_rate = max(0.0, float(same_name[0][CONF_EXPORT_RATE_PER_KWH]))
             except (TypeError, ValueError):
                 pass
 
@@ -1533,6 +1543,9 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     (user_input.get("window_name") or edit_name or "").strip(),
                     _parse_cost(user_input.get(CONF_IMPORT_RATE_PER_KWH)),
                     ranges_for_form,
+                    export_rate_per_kwh=_parse_cost(
+                        user_input.get(CONF_EXPORT_RATE_PER_KWH)
+                    ),
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
@@ -1555,6 +1568,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         for i in range(num_ranges)
                     ],
                     include_add_another=True,
+                    export_rate_per_kwh=export_rate_val,
                     include_delete=False,
                     num_slots=num_ranges,
                 )
@@ -1579,6 +1593,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         }
                     ],
                     include_add_another=True,
+                    export_rate_per_kwh=export_rate_val,
                     include_delete=True,
                     num_slots=num_ranges,
                 )
@@ -1604,6 +1619,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     w_name or "",
                     cost_val,
                     ranges_for_form,
+                    export_rate_per_kwh=export_rate_val,
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
@@ -1627,6 +1643,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     candidate_name,
                     cost_val,
                     ranges_for_form,
+                    export_rate_per_kwh=export_rate_val,
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
@@ -1640,6 +1657,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 self._pending_add_name = w_name or ""
                 self._pending_add_cost = cost_val
+                self._pending_add_export_rate = export_rate_val
                 self._pending_add_ranges = [
                     {"start": s, "end": e} for s, e in ranges_list
                 ]
@@ -1653,6 +1671,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._pending_add_name,
                     self._pending_add_cost,
                     self._pending_add_ranges,
+                    export_rate_per_kwh=self._pending_add_export_rate,
                     include_add_another=True,
                     include_delete=False,
                     num_slots=num_ranges,
@@ -1685,6 +1704,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             edit_name,
             cost,
             ranges_data,
+            export_rate_per_kwh=export_rate,
             include_add_another=True,
             include_delete=False,
             num_slots=num_ranges,
@@ -1829,11 +1849,17 @@ def _get_sources_from_entry(entry: config_entries.ConfigEntry) -> list[dict[str,
             continue
         name = (w.get(CONF_WINDOW_NAME) or "").strip() or f"Window {i + 1}"
         cost = 0.0
+        export_rate = 0.0
         try:
             if w.get(CONF_IMPORT_RATE_PER_KWH) is not None:
                 cost = max(0.0, float(w.get(CONF_IMPORT_RATE_PER_KWH)))
         except (TypeError, ValueError):
             cost = 0.0
+        try:
+            if w.get(CONF_EXPORT_RATE_PER_KWH) is not None:
+                export_rate = max(0.0, float(w.get(CONF_EXPORT_RATE_PER_KWH)))
+        except (TypeError, ValueError):
+            export_rate = 0.0
 
         range_rows: list[dict[str, Any]] = []
         for r in ranges:
@@ -1849,6 +1875,7 @@ def _get_sources_from_entry(entry: config_entries.ConfigEntry) -> list[dict[str,
                     CONF_WINDOW_START: start,
                     CONF_WINDOW_END: end,
                     CONF_IMPORT_RATE_PER_KWH: cost,
+                    CONF_EXPORT_RATE_PER_KWH: export_rate,
                 }
             )
 
@@ -1901,6 +1928,9 @@ def _sources_to_windows(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 {
                     CONF_WINDOW_NAME: window.get(CONF_WINDOW_NAME),
                     CONF_IMPORT_RATE_PER_KWH: _parse_cost(window.get(CONF_IMPORT_RATE_PER_KWH)),
+                    CONF_EXPORT_RATE_PER_KWH: _parse_cost(
+                        window.get(CONF_EXPORT_RATE_PER_KWH)
+                    ),
                     CONF_ENTITIES: [source_entity],
                     CONF_RANGES: [
                         {
@@ -2847,6 +2877,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             for w in same_name
         ]
         cost = 0.0
+        export_rate = 0.0
         if (
             same_name
             and CONF_IMPORT_RATE_PER_KWH in same_name[0]
@@ -2854,6 +2885,15 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
         ):
             try:
                 cost = max(0.0, float(same_name[0][CONF_IMPORT_RATE_PER_KWH]))
+            except (TypeError, ValueError):
+                pass
+        if (
+            same_name
+            and CONF_EXPORT_RATE_PER_KWH in same_name[0]
+            and same_name[0][CONF_EXPORT_RATE_PER_KWH] is not None
+        ):
+            try:
+                export_rate = max(0.0, float(same_name[0][CONF_EXPORT_RATE_PER_KWH]))
             except (TypeError, ValueError):
                 pass
 
@@ -2896,6 +2936,9 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     (user_input.get("window_name") or edit_name or "").strip(),
                     _parse_cost(user_input.get(CONF_IMPORT_RATE_PER_KWH)),
                     ranges_for_form,
+                    export_rate_per_kwh=_parse_cost(
+                        user_input.get(CONF_EXPORT_RATE_PER_KWH)
+                    ),
                     include_add_another=True,
                     include_delete=False,
                     include_range_delete=False,
@@ -2926,6 +2969,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                         for i in range(num_ranges_for_collect)
                     ],
                     include_add_another=True,
+                    export_rate_per_kwh=export_rate_val,
                     include_delete=False,
                     include_range_delete=False,
                     allow_empty_slots=True,
@@ -2963,6 +3007,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     w_name or "",
                     cost_val,
                     ranges_for_form,
+                    export_rate_per_kwh=export_rate_val,
                     include_add_another=True,
                     include_delete=False,
                     include_range_delete=False,
@@ -2989,6 +3034,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     candidate_name,
                     cost_val,
                     ranges_for_form,
+                    export_rate_per_kwh=export_rate_val,
                     include_add_another=True,
                     include_delete=False,
                     include_range_delete=False,
@@ -3004,6 +3050,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 )
                 self._pending_add_name = w_name or ""
                 self._pending_add_cost = cost_val
+                self._pending_add_export_rate = export_rate_val
                 self._pending_add_ranges = [
                     {"start": s, "end": e} for s, e in ranges_list
                 ]
@@ -3017,6 +3064,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     self._pending_add_name,
                     self._pending_add_cost,
                     self._pending_add_ranges,
+                    export_rate_per_kwh=self._pending_add_export_rate,
                     include_add_another=True,
                     include_delete=False,
                     include_range_delete=False,
@@ -3059,6 +3107,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             self._pending_add_ranges = []
             self._pending_add_name = ""
             self._pending_add_cost = 0.0
+            self._pending_add_export_rate = 0.0
             _MAIN_LOGGER.debug(
                 "options flow step edit_window: saved window %r with %s time range(s)",
                 edit_name,
@@ -3073,6 +3122,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             edit_name,
             cost,
             ranges_data,
+            export_rate_per_kwh=export_rate,
             include_add_another=True,
             include_delete=False,
             include_range_delete=False,

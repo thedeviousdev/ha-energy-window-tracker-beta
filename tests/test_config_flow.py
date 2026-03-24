@@ -1629,3 +1629,60 @@ async def test_window_setup_happy_uses_import_and_export_rate_fields(
     assert "import_rate_per_kwh" in schema_fields
     assert "export_rate_per_kwh" in schema_fields
     assert "cost_per_kwh" not in schema_fields
+
+
+@pytest.mark.asyncio
+async def test_options_edit_window_happy_preserves_import_and_export_rates(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Editing keeps decimal import/export rates instead of resetting."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Energy Window Tracker (Beta)",
+        data={
+            CONF_WINDOWS: _windows_from_sources([
+                {
+                    CONF_SOURCE_ENTITY: "sensor.today_load",
+                    CONF_NAME: "Load",
+                    CONF_WINDOWS: [
+                        {
+                            CONF_WINDOW_NAME: "Peak",
+                            CONF_WINDOW_START: "09:00",
+                            CONF_WINDOW_END: "10:00",
+                            CONF_IMPORT_RATE_PER_KWH: 0.407,
+                            "export_rate_per_kwh": 0.03,
+                        }
+                    ],
+                }
+            ])
+        },
+        options={},
+        entry_id="rates_preserved_on_edit",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "list_windows"}
+    )
+    assert result["step_id"] == "edit_window"
+
+    # Save without changing rates to verify defaults are preserved.
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            CONF_IMPORT_RATE_PER_KWH: 0.407,
+            "export_rate_per_kwh": 0.03,
+            "start_1": "09:00",
+            "end_1": "10:00",
+        },
+    )
+    assert result["step_id"] == "options_saved"
+
+    saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert saved_entry is not None
+    windows = saved_entry.options.get(CONF_WINDOWS) or saved_entry.data.get(CONF_WINDOWS) or []
+    assert windows
+    assert abs(float(windows[0].get(CONF_IMPORT_RATE_PER_KWH)) - 0.407) < 1e-9
+    assert abs(float(windows[0].get("export_rate_per_kwh")) - 0.03) < 1e-9
