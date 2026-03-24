@@ -21,7 +21,7 @@ from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.energy_window_tracker_beta.const import (
-    CONF_COST_PER_KWH,
+    CONF_IMPORT_RATE_PER_KWH,
     CONF_ENTITIES,
     CONF_RANGES,
     CONF_WINDOW_END,
@@ -88,7 +88,7 @@ async def test_window_setup_start_ge_end_rejected_errors_base(
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "17:00",
             "end_1": "09:00",
         },
@@ -114,7 +114,7 @@ async def test_window_setup_invalid_time_value_shows_invalid_time(
             result["flow_id"],
             {
                 "window_name": "Peak",
-                "cost_per_kwh": 0.2,
+                "import_rate_per_kwh": 0.2,
                 "start_1": "25:00",
                 "end_1": "09:00",
             },
@@ -143,7 +143,7 @@ async def test_window_setup_happy_seconds_are_persisted_as_hhmmss(
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00:05",
             "end_1": "12:00:10",
         },
@@ -179,7 +179,7 @@ async def test_window_setup_unhappy_seconds_overlap_rejected(
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00:00",
             "end_1": "12:00:30",
             "add_another": True,
@@ -191,7 +191,7 @@ async def test_window_setup_unhappy_seconds_overlap_rejected(
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00:00",
             "end_1": "12:00:30",
             "start_2": "12:00:00",
@@ -225,7 +225,7 @@ async def test_options_add_window_start_ge_end_rejected(
         result["flow_id"],
         {
             "window_name": "Off-Peak",
-            "cost_per_kwh": 0.1,
+            "import_rate_per_kwh": 0.1,
             "start_1": "18:00",
             "end_1": "06:00",
         },
@@ -260,7 +260,7 @@ async def test_options_add_window_invalid_time_value_field_error(
             result["flow_id"],
             {
                 "window_name": "Bad",
-                "cost_per_kwh": 0.0,
+                "import_rate_per_kwh": 0.0,
                 "start_1": "25:00",
                 "end_1": "06:00",
             },
@@ -282,7 +282,7 @@ async def test_options_manage_windows_unique_names_only(hass: HomeAssistant) -> 
             CONF_WINDOWS: [
                 {
                     CONF_WINDOW_NAME: "Peak",
-                    CONF_COST_PER_KWH: 0.1,
+                    CONF_IMPORT_RATE_PER_KWH: 0.1,
                     CONF_ENTITIES: ["sensor.today_load"],
                     CONF_RANGES: [
                         {CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "12:00"}
@@ -290,7 +290,7 @@ async def test_options_manage_windows_unique_names_only(hass: HomeAssistant) -> 
                 },
                 {
                     CONF_WINDOW_NAME: "Peak",
-                    CONF_COST_PER_KWH: 0.1,
+                    CONF_IMPORT_RATE_PER_KWH: 0.1,
                     CONF_ENTITIES: ["sensor.today_load"],
                     CONF_RANGES: [
                         {CONF_WINDOW_START: "14:00", CONF_WINDOW_END: "17:00"}
@@ -298,7 +298,7 @@ async def test_options_manage_windows_unique_names_only(hass: HomeAssistant) -> 
                 },
                 {
                     CONF_WINDOW_NAME: "Off-Peak",
-                    CONF_COST_PER_KWH: 0.1,
+                    CONF_IMPORT_RATE_PER_KWH: 0.1,
                     CONF_ENTITIES: ["sensor.today_load"],
                     CONF_RANGES: [
                         {CONF_WINDOW_START: "12:00", CONF_WINDOW_END: "14:00"}
@@ -387,7 +387,7 @@ async def test_window_setup_happy_schema_serializes_with_allow_empty_slots(
         labels=labels,
         default_source_name=None,
         window_name="Peak",
-        cost_per_kwh=0.2,
+        import_rate_per_kwh=0.2,
         ranges=[{CONF_WINDOW_START: "09:00:00", CONF_WINDOW_END: "10:00:00"}],
         include_add_another=True,
         num_slots=2,
@@ -450,7 +450,7 @@ async def test_sensor_same_day_snapshot_used_during_window(hass: HomeAssistant) 
         window_groups=[
             {
                 CONF_WINDOW_NAME: "Peak",
-                CONF_COST_PER_KWH: 0.0,
+                CONF_IMPORT_RATE_PER_KWH: 0.0,
                 CONF_ENTITIES: ["sensor.today_load"],
                 CONF_RANGES: [{CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "17:00"}],
             }
@@ -496,7 +496,7 @@ async def test_sensor_stale_snapshot_discarded_when_late_snapshot_disabled(
         window_groups=[
             {
                 CONF_WINDOW_NAME: "Peak",
-                CONF_COST_PER_KWH: 0.0,
+                CONF_IMPORT_RATE_PER_KWH: 0.0,
                 CONF_ENTITIES: ["sensor.today_load"],
                 CONF_RANGES: [{CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "17:00"}],
             }
@@ -548,7 +548,7 @@ async def test_sensor_invalid_config_times_expose_config_warnings(
             CONF_WINDOWS: [
                 {
                     CONF_WINDOW_NAME: "Peak",
-                    CONF_COST_PER_KWH: 0.0,
+                    CONF_IMPORT_RATE_PER_KWH: 0.0,
                     CONF_ENTITIES: ["sensor.today_load"],
                     CONF_RANGES: [
                         {
@@ -593,13 +593,13 @@ async def test_unique_ids_stable_when_window_groups_reordered(
         window_groups=[
             {
                 CONF_WINDOW_NAME: "Peak",
-                CONF_COST_PER_KWH: 0.0,
+                CONF_IMPORT_RATE_PER_KWH: 0.0,
                 CONF_ENTITIES: [source_entity],
                 CONF_RANGES: [{CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "12:00"}],
             },
             {
                 CONF_WINDOW_NAME: "Off-Peak",
-                CONF_COST_PER_KWH: 0.0,
+                CONF_IMPORT_RATE_PER_KWH: 0.0,
                 CONF_ENTITIES: [source_entity],
                 CONF_RANGES: [{CONF_WINDOW_START: "12:00", CONF_WINDOW_END: "17:00"}],
             },
@@ -661,13 +661,13 @@ async def test_unique_ids_happy_stay_stable_when_window_renamed(
         window_groups=[
             {
                 CONF_WINDOW_NAME: "Peak",
-                CONF_COST_PER_KWH: 0.0,
+                CONF_IMPORT_RATE_PER_KWH: 0.0,
                 CONF_ENTITIES: [source_entity],
                 CONF_RANGES: [{CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "12:00"}],
             },
             {
                 CONF_WINDOW_NAME: "Off-Peak",
-                CONF_COST_PER_KWH: 0.0,
+                CONF_IMPORT_RATE_PER_KWH: 0.0,
                 CONF_ENTITIES: [source_entity],
                 CONF_RANGES: [{CONF_WINDOW_START: "12:00", CONF_WINDOW_END: "17:00"}],
             },
@@ -729,7 +729,7 @@ async def test_options_rename_happy_preserves_unique_ids_and_history_identity(
         window_groups=[
             {
                 CONF_WINDOW_NAME: "ZEROCHARGE",
-                CONF_COST_PER_KWH: 0.0,
+                CONF_IMPORT_RATE_PER_KWH: 0.0,
                 CONF_ENTITIES: ["sensor.today_load"],
                 CONF_RANGES: [{CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "12:00"}],
             }
@@ -759,7 +759,7 @@ async def test_options_rename_happy_preserves_unique_ids_and_history_identity(
         result["flow_id"],
         {
             "window_name": "ZEROCHARGE2",
-            CONF_COST_PER_KWH: 0.0,
+            CONF_IMPORT_RATE_PER_KWH: 0.0,
             "start_1": "09:00:00",
             "end_1": "12:00:00",
         },

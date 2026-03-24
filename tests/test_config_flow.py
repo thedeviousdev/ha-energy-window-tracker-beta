@@ -14,7 +14,7 @@ from custom_components.energy_window_tracker_beta.config_flow import (
     _get_sources_from_entry,
 )
 from custom_components.energy_window_tracker_beta.const import (
-    CONF_COST_PER_KWH,
+    CONF_IMPORT_RATE_PER_KWH,
     CONF_ENTITIES,
     CONF_NAME,
     CONF_RANGES,
@@ -38,7 +38,7 @@ def _windows_from_sources(sources: list[dict]) -> list[dict]:
             windows.append(
                 {
                     CONF_WINDOW_NAME: window.get(CONF_WINDOW_NAME),
-                    CONF_COST_PER_KWH: window.get(CONF_COST_PER_KWH, 0.0),
+                    CONF_IMPORT_RATE_PER_KWH: window.get(CONF_IMPORT_RATE_PER_KWH, 0.0),
                     CONF_ENTITIES: [entity_id] if entity_id else [],
                     CONF_RANGES: [
                         {
@@ -73,7 +73,7 @@ async def test_window_setup_unhappy_overlap_ranges_rejected(
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00",
             "end_1": "12:00",
             "add_another": True,
@@ -85,7 +85,7 @@ async def test_window_setup_unhappy_overlap_ranges_rejected(
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00",
             "end_1": "12:00",
             "start_2": "11:00",
@@ -108,7 +108,7 @@ async def test_window_setup_unhappy_requires_window_name(
         result["flow_id"],
         {
             "window_name": "",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00",
             "end_1": "12:00",
         },
@@ -130,7 +130,7 @@ async def test_window_entities_unhappy_requires_at_least_one_entity(
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00",
             "end_1": "12:00",
         },
@@ -182,7 +182,7 @@ async def test_options_flow_happy_title_uses_windows_when_entry_title_generic(
             CONF_WINDOWS: [
                 {
                     CONF_WINDOW_NAME: "ZEROCHARGE",
-                    CONF_COST_PER_KWH: 0.2,
+                    CONF_IMPORT_RATE_PER_KWH: 0.2,
                     CONF_ENTITIES: ["sensor.today_load"],
                     CONF_RANGES: [
                         {CONF_WINDOW_START: "09:00:00", CONF_WINDOW_END: "11:00:00"}
@@ -306,7 +306,7 @@ async def test_options_source_entity_happy_multiple_sources_single_form(
             CONF_WINDOWS: [
                 {
                     CONF_WINDOW_NAME: "Peak",
-                    CONF_COST_PER_KWH: 0.2,
+                    CONF_IMPORT_RATE_PER_KWH: 0.2,
                     "entities": ["sensor.today_load", "sensor.today_import"],
                     "ranges": [
                         {CONF_WINDOW_START: "09:00:00", CONF_WINDOW_END: "11:00:00"}
@@ -345,7 +345,7 @@ async def test_options_add_window_happy_path_persists(
             result["flow_id"],
             {
                 "window_name": "Off-Peak",
-                CONF_COST_PER_KWH: 0.1,
+                CONF_IMPORT_RATE_PER_KWH: 0.1,
                 "start_1": "00:00",
                 "end_1": "07:00",
             },
@@ -382,7 +382,7 @@ async def test_options_add_window_unhappy_duplicate_name_rejected(
         result["flow_id"],
         {
             "window_name": "Peak",
-            CONF_COST_PER_KWH: 0.1,
+            CONF_IMPORT_RATE_PER_KWH: 0.1,
             "start_1": "00:00",
             "end_1": "07:00",
         },
@@ -407,7 +407,7 @@ async def test_options_add_window_unhappy_requires_window_name(
         result["flow_id"],
         {
             "window_name": "",
-            CONF_COST_PER_KWH: 0.1,
+            CONF_IMPORT_RATE_PER_KWH: 0.1,
             "start_1": "00:00",
             "end_1": "07:00",
         },
@@ -435,7 +435,7 @@ async def test_options_edit_window_happy_preserves_other_sources(
                             CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "11:00",
-                            CONF_COST_PER_KWH: 0.2,
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
                         }
                     ],
                 },
@@ -447,7 +447,7 @@ async def test_options_edit_window_happy_preserves_other_sources(
                             CONF_WINDOW_NAME: "Import Peak",
                             CONF_WINDOW_START: "12:00",
                             CONF_WINDOW_END: "14:00",
-                            CONF_COST_PER_KWH: 0.3,
+                            CONF_IMPORT_RATE_PER_KWH: 0.3,
                         }
                     ],
                 },
@@ -468,7 +468,7 @@ async def test_options_edit_window_happy_preserves_other_sources(
         result["flow_id"],
         {
             "window_name": "Peak",
-            CONF_COST_PER_KWH: 0.25,
+            CONF_IMPORT_RATE_PER_KWH: 0.25,
             "start_1": "09:00",
             "end_1": "12:00",
         },
@@ -514,13 +514,13 @@ async def test_options_edit_window_unhappy_rename_to_existing_name_rejected(
                             CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "11:00",
-                            CONF_COST_PER_KWH: 0.2,
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
                         },
                         {
                             CONF_WINDOW_NAME: "Off-Peak",
                             CONF_WINDOW_START: "12:00",
                             CONF_WINDOW_END: "14:00",
-                            CONF_COST_PER_KWH: 0.1,
+                            CONF_IMPORT_RATE_PER_KWH: 0.1,
                         },
                     ],
                 }
@@ -541,7 +541,7 @@ async def test_options_edit_window_unhappy_rename_to_existing_name_rejected(
         result["flow_id"],
         {
             "window_name": "Off-Peak",
-            CONF_COST_PER_KWH: 0.2,
+            CONF_IMPORT_RATE_PER_KWH: 0.2,
             "start_1": "09:00",
             "end_1": "11:00",
         },
@@ -569,7 +569,7 @@ async def test_options_source_entity_happy_update_replaces_source_set(
                             CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "11:00",
-                            CONF_COST_PER_KWH: 0.2,
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
                         }
                     ],
                 },
@@ -581,7 +581,7 @@ async def test_options_source_entity_happy_update_replaces_source_set(
                             CONF_WINDOW_NAME: "Import Peak",
                             CONF_WINDOW_START: "12:00",
                             CONF_WINDOW_END: "14:00",
-                            CONF_COST_PER_KWH: 0.3,
+                            CONF_IMPORT_RATE_PER_KWH: 0.3,
                         }
                     ],
                 },
@@ -636,7 +636,7 @@ async def test_options_source_entity_happy_remove_one_keeps_other_registry_entit
                             CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "11:00",
-                            CONF_COST_PER_KWH: 0.2,
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
                         }
                     ],
                 },
@@ -648,7 +648,7 @@ async def test_options_source_entity_happy_remove_one_keeps_other_registry_entit
                             CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "11:00",
-                            CONF_COST_PER_KWH: 0.2,
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
                         }
                     ],
                 },
@@ -714,7 +714,7 @@ async def test_options_edit_window_happy_windows_based_preserves_all_entities(
             CONF_WINDOWS: [
                 {
                     CONF_WINDOW_NAME: "Peak",
-                    CONF_COST_PER_KWH: 0.2,
+                    CONF_IMPORT_RATE_PER_KWH: 0.2,
                     "entities": ["sensor.today_load", "sensor.today_import"],
                     "ranges": [
                         {CONF_WINDOW_START: "09:00:00", CONF_WINDOW_END: "11:00:00"}
@@ -737,7 +737,7 @@ async def test_options_edit_window_happy_windows_based_preserves_all_entities(
         result["flow_id"],
         {
             "window_name": "Peak",
-            CONF_COST_PER_KWH: 0.25,
+            CONF_IMPORT_RATE_PER_KWH: 0.25,
             "start_1": "09:00:00",
             "end_1": "12:00:00",
         },
@@ -773,7 +773,7 @@ async def test_options_add_window_unhappy_duplicate_name_in_other_source_rejecte
                             CONF_WINDOW_NAME: "ZEROHERO",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "11:00",
-                            CONF_COST_PER_KWH: 0.2,
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
                         }
                     ],
                 },
@@ -785,7 +785,7 @@ async def test_options_add_window_unhappy_duplicate_name_in_other_source_rejecte
                             CONF_WINDOW_NAME: "Import Peak",
                             CONF_WINDOW_START: "12:00",
                             CONF_WINDOW_END: "14:00",
-                            CONF_COST_PER_KWH: 0.3,
+                            CONF_IMPORT_RATE_PER_KWH: 0.3,
                         }
                     ],
                 },
@@ -819,7 +819,7 @@ async def test_options_add_window_unhappy_duplicate_name_in_other_source_rejecte
         result["flow_id"],
         {
             "window_name": "ZEROHERO",
-            CONF_COST_PER_KWH: 0.1,
+            CONF_IMPORT_RATE_PER_KWH: 0.1,
             "start_1": "15:00",
             "end_1": "16:00",
         },
@@ -843,7 +843,7 @@ async def test_window_entities_happy_creates_one_window_per_selected_entity(
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00",
             "end_1": "11:00",
         },
@@ -886,19 +886,19 @@ async def test_options_edit_window_happy_delete_middle_range_preserves_flow(
                             CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "10:00",
-                            CONF_COST_PER_KWH: 0.2,
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
                         },
                         {
                             CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "11:00",
                             CONF_WINDOW_END: "12:00",
-                            CONF_COST_PER_KWH: 0.2,
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
                         },
                         {
                             CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "13:00",
                             CONF_WINDOW_END: "14:00",
-                            CONF_COST_PER_KWH: 0.2,
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
                         },
                     ],
                 }
@@ -919,11 +919,86 @@ async def test_options_edit_window_happy_delete_middle_range_preserves_flow(
         result["flow_id"],
         {
             "window_name": "Peak",
-            CONF_COST_PER_KWH: 0.2,
+            CONF_IMPORT_RATE_PER_KWH: 0.2,
             "start_1": "09:00",
             "end_1": "10:00",
             "start_2": "11:00",
             "end_2": "11:00",
+            "start_3": "13:00",
+            "end_3": "14:00",
+        },
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "options_saved"
+
+    saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert saved_entry is not None
+    sources = _get_sources_from_entry(saved_entry)
+    assert len(sources) == 1
+    windows = sources[0][CONF_WINDOWS]
+    assert len(windows) == 2
+    assert windows[0][CONF_WINDOW_START] == "09:00:00"
+    assert windows[0][CONF_WINDOW_END] == "10:00:00"
+    assert windows[1][CONF_WINDOW_START] == "13:00:00"
+    assert windows[1][CONF_WINDOW_END] == "14:00:00"
+
+
+@pytest.mark.asyncio
+async def test_options_edit_window_happy_empty_middle_range_fields_remove_range(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Clearing both start/end for a middle range removes it."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Energy Window Tracker (Beta)",
+        data={
+            CONF_WINDOWS: _windows_from_sources([
+                {
+                    CONF_SOURCE_ENTITY: "sensor.today_load",
+                    CONF_NAME: "Load",
+                    CONF_WINDOWS: [
+                        {
+                            CONF_WINDOW_NAME: "Peak",
+                            CONF_WINDOW_START: "09:00",
+                            CONF_WINDOW_END: "10:00",
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
+                        },
+                        {
+                            CONF_WINDOW_NAME: "Peak",
+                            CONF_WINDOW_START: "11:00",
+                            CONF_WINDOW_END: "12:00",
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
+                        },
+                        {
+                            CONF_WINDOW_NAME: "Peak",
+                            CONF_WINDOW_START: "13:00",
+                            CONF_WINDOW_END: "14:00",
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
+                        },
+                    ],
+                }
+            ])
+        },
+        options={},
+        entry_id="empty_middle_delete",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "list_windows"}
+    )
+    assert result["step_id"] == "edit_window"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            CONF_IMPORT_RATE_PER_KWH: 0.2,
+            "start_1": "09:00",
+            "end_1": "10:00",
+            "start_2": None,
+            "end_2": None,
             "start_3": "13:00",
             "end_3": "14:00",
         },
@@ -961,7 +1036,7 @@ async def test_options_edit_window_unhappy_delete_all_ranges_requires_confirmati
                             CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "10:00",
-                            CONF_COST_PER_KWH: 0.2,
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
                         }
                     ],
                 }
@@ -982,7 +1057,7 @@ async def test_options_edit_window_unhappy_delete_all_ranges_requires_confirmati
         result["flow_id"],
         {
             "window_name": "Peak",
-            CONF_COST_PER_KWH: 0.2,
+            CONF_IMPORT_RATE_PER_KWH: 0.2,
             "start_1": "09:00",
             "end_1": "09:00",
         },
@@ -1009,7 +1084,7 @@ async def test_options_edit_window_happy_delete_all_ranges_after_confirmation(
                             CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "10:00",
-                            CONF_COST_PER_KWH: 0.2,
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
                         }
                     ],
                 }
@@ -1030,7 +1105,7 @@ async def test_options_edit_window_happy_delete_all_ranges_after_confirmation(
         result["flow_id"],
         {
             "window_name": "Peak",
-            CONF_COST_PER_KWH: 0.2,
+            CONF_IMPORT_RATE_PER_KWH: 0.2,
             "start_1": "09:00",
             "end_1": "09:00",
         },
@@ -1065,7 +1140,7 @@ async def test_options_edit_window_happy_renaming_updates_entry_title(
                             CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "09:00",
                             CONF_WINDOW_END: "11:00",
-                            CONF_COST_PER_KWH: 0.2,
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
                         }
                     ],
                 }
@@ -1085,7 +1160,7 @@ async def test_options_edit_window_happy_renaming_updates_entry_title(
         result["flow_id"],
         {
             "window_name": "Super Peak",
-            CONF_COST_PER_KWH: 0.2,
+            CONF_IMPORT_RATE_PER_KWH: 0.2,
             "start_1": "09:00",
             "end_1": "11:00",
         },
@@ -1110,7 +1185,7 @@ async def test_options_edit_window_happy_rename_applies_to_all_entities(
             CONF_WINDOWS: [
                 {
                     CONF_WINDOW_NAME: "ZEROCHARGE",
-                    CONF_COST_PER_KWH: 0.0,
+                    CONF_IMPORT_RATE_PER_KWH: 0.0,
                     CONF_ENTITIES: ["sensor.today_load"],
                     CONF_RANGES: [
                         {CONF_WINDOW_START: "11:00:00", CONF_WINDOW_END: "14:00:00"}
@@ -1118,7 +1193,7 @@ async def test_options_edit_window_happy_rename_applies_to_all_entities(
                 },
                 {
                     CONF_WINDOW_NAME: "ZEROCHARGE",
-                    CONF_COST_PER_KWH: 0.0,
+                    CONF_IMPORT_RATE_PER_KWH: 0.0,
                     CONF_ENTITIES: ["sensor.today_battery_discharge"],
                     CONF_RANGES: [
                         {CONF_WINDOW_START: "11:00:00", CONF_WINDOW_END: "14:00:00"}
@@ -1126,7 +1201,7 @@ async def test_options_edit_window_happy_rename_applies_to_all_entities(
                 },
                 {
                     CONF_WINDOW_NAME: "ZEROCHARGE",
-                    CONF_COST_PER_KWH: 0.0,
+                    CONF_IMPORT_RATE_PER_KWH: 0.0,
                     CONF_ENTITIES: ["sensor.today_battery_charge"],
                     CONF_RANGES: [
                         {CONF_WINDOW_START: "11:00:00", CONF_WINDOW_END: "14:00:00"}
@@ -1149,7 +1224,7 @@ async def test_options_edit_window_happy_rename_applies_to_all_entities(
         result["flow_id"],
         {
             "window_name": "ZEROCHARGE2",
-            CONF_COST_PER_KWH: 0.0,
+            CONF_IMPORT_RATE_PER_KWH: 0.0,
             "start_1": "11:00:00",
             "end_1": "14:00:00",
         },
@@ -1166,7 +1241,7 @@ async def test_options_edit_window_happy_rename_applies_to_all_entities(
         result["flow_id"],
         {
             "window_name": "ZEROCHARGE",
-            CONF_COST_PER_KWH: 0.0,
+            CONF_IMPORT_RATE_PER_KWH: 0.0,
             "start_1": "11:00:00",
             "end_1": "14:00:00",
         },
@@ -1196,7 +1271,7 @@ async def test_options_edit_window_happy_rename_back_does_not_trigger_duplicate_
             CONF_WINDOWS: [
                 {
                     CONF_WINDOW_NAME: "ZEROCHARGE",
-                    CONF_COST_PER_KWH: 0.0,
+                    CONF_IMPORT_RATE_PER_KWH: 0.0,
                     CONF_ENTITIES: ["sensor.today_load", "sensor.today_import"],
                     CONF_RANGES: [
                         {CONF_WINDOW_START: "11:00:00", CONF_WINDOW_END: "14:00:00"}
@@ -1219,7 +1294,7 @@ async def test_options_edit_window_happy_rename_back_does_not_trigger_duplicate_
         result["flow_id"],
         {
             "window_name": "ZEROCHARGE2",
-            CONF_COST_PER_KWH: 0.0,
+            CONF_IMPORT_RATE_PER_KWH: 0.0,
             "start_1": "11:00:00",
             "end_1": "14:00:00",
         },
@@ -1235,7 +1310,7 @@ async def test_options_edit_window_happy_rename_back_does_not_trigger_duplicate_
         result["flow_id"],
         {
             "window_name": "ZEROCHARGE",
-            CONF_COST_PER_KWH: 0.0,
+            CONF_IMPORT_RATE_PER_KWH: 0.0,
             "start_1": "11:00:00",
             "end_1": "14:00:00",
         },
@@ -1260,7 +1335,7 @@ async def test_options_add_window_unhappy_duplicate_name_rejected_windows_case(
         result["flow_id"],
         {
             "window_name": "Peak",
-            CONF_COST_PER_KWH: 0.2,
+            CONF_IMPORT_RATE_PER_KWH: 0.2,
             "start_1": "18:00",
             "end_1": "19:00",
         },
@@ -1293,7 +1368,7 @@ async def test_window_setup_happy_same_name_with_multiple_entities_has_no_errors
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00",
             "end_1": "11:00",
         },
@@ -1332,7 +1407,7 @@ async def test_window_entities_happy_multiple_entities_creates_entry_and_sensors
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00:00",
             "end_1": "11:00:00",
         },
@@ -1384,7 +1459,7 @@ async def test_window_entities_unhappy_setup_failed_shows_error(
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00:00",
             "end_1": "11:00:00",
         },
@@ -1418,7 +1493,7 @@ async def test_config_source_entity_happy_loads_after_window_setup_finish(
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00:00",
             "end_1": "11:00:00",
         },
@@ -1461,7 +1536,7 @@ async def test_config_list_windows_happy_loads_after_window_setup_finish(
         result["flow_id"],
         {
             "window_name": "Peak",
-            "cost_per_kwh": 0.2,
+            "import_rate_per_kwh": 0.2,
             "start_1": "09:00:00",
             "end_1": "11:00:00",
         },
@@ -1502,7 +1577,7 @@ async def test_config_edit_window_happy_immediate_multi_range_shows_all_ranges(
         result["flow_id"],
         {
             "window_name": "ZEROCHARGE",
-            "cost_per_kwh": 0.0,
+            "import_rate_per_kwh": 0.0,
             "start_1": "00:00:00",
             "end_1": "11:00:00",
             "add_another": True,
@@ -1513,7 +1588,7 @@ async def test_config_edit_window_happy_immediate_multi_range_shows_all_ranges(
         result["flow_id"],
         {
             "window_name": "ZEROCHARGE",
-            "cost_per_kwh": 0.0,
+            "import_rate_per_kwh": 0.0,
             "start_1": "00:00:00",
             "end_1": "11:00:00",
             "start_2": "14:00:00",
@@ -1539,3 +1614,18 @@ async def test_config_edit_window_happy_immediate_multi_range_shows_all_ranges(
     schema_fields = {str(field.schema) for field in schema.schema}
     assert "start_1" in schema_fields and "end_1" in schema_fields
     assert "start_2" in schema_fields and "end_2" in schema_fields
+
+
+@pytest.mark.asyncio
+async def test_window_setup_happy_uses_import_and_export_rate_fields(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Window setup form uses import/export rate field keys."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    assert result["step_id"] == "window_setup"
+    schema_fields = {str(field.schema) for field in result["data_schema"].schema}
+    assert "import_rate_per_kwh" in schema_fields
+    assert "export_rate_per_kwh" in schema_fields
+    assert "cost_per_kwh" not in schema_fields
