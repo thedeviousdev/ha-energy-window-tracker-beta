@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.56](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.55...v2.3.56) (2026-03-24)
+
+
+### Bug Fixes
+
+* **flow:** preserve multi-range values on immediate edit ([#38](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/38)) ([e837183](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/e83718385616ecc012ea468b6aa2e71988b1e23b))
+
 ## [2.3.55](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.54...v2.3.55) (2026-03-24)
 
 
