@@ -1019,6 +1019,79 @@ async def test_options_edit_window_happy_empty_middle_range_fields_remove_range(
 
 
 @pytest.mark.asyncio
+async def test_options_edit_window_happy_omitted_middle_range_keys_remove_range(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Omitted start/end keys for a middle slot remove it (same as clearing)."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Energy Window Tracker (Beta)",
+        data={
+            CONF_WINDOWS: _windows_from_sources([
+                {
+                    CONF_SOURCE_ENTITY: "sensor.today_load",
+                    CONF_NAME: "Load",
+                    CONF_WINDOWS: [
+                        {
+                            CONF_WINDOW_NAME: "Peak",
+                            CONF_WINDOW_START: "09:00",
+                            CONF_WINDOW_END: "10:00",
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
+                        },
+                        {
+                            CONF_WINDOW_NAME: "Peak",
+                            CONF_WINDOW_START: "11:00",
+                            CONF_WINDOW_END: "12:00",
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
+                        },
+                        {
+                            CONF_WINDOW_NAME: "Peak",
+                            CONF_WINDOW_START: "13:00",
+                            CONF_WINDOW_END: "14:00",
+                            CONF_IMPORT_RATE_PER_KWH: 0.2,
+                        },
+                    ],
+                }
+            ])
+        },
+        options={},
+        entry_id="omit_middle_keys",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "list_windows"}
+    )
+    assert result["step_id"] == "edit_window"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            CONF_IMPORT_RATE_PER_KWH: 0.2,
+            "start_1": "09:00",
+            "end_1": "10:00",
+            "start_3": "13:00",
+            "end_3": "14:00",
+        },
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "options_saved"
+
+    saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert saved_entry is not None
+    sources = _get_sources_from_entry(saved_entry)
+    assert len(sources) == 1
+    windows = sources[0][CONF_WINDOWS]
+    assert len(windows) == 2
+    assert windows[0][CONF_WINDOW_START] == "09:00:00"
+    assert windows[0][CONF_WINDOW_END] == "10:00:00"
+    assert windows[1][CONF_WINDOW_START] == "13:00:00"
+    assert windows[1][CONF_WINDOW_END] == "14:00:00"
+
+
+@pytest.mark.asyncio
 async def test_options_edit_window_unhappy_delete_all_ranges_requires_confirmation(
     hass: HomeAssistant,
 ) -> None:
