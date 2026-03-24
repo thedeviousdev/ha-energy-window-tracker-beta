@@ -981,31 +981,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             source_name = (user_input.get("source_name") or "").strip() or default_name
             source_name = (source_name or defaults["entry_title"]).strip()[:200]
             entry_title = source_name or defaults["entry_title"]
-            existing = _entry_using_source_entity(
-                self.hass, source_entity, exclude_entry_id=None
-            )
-            if existing is not None:
-                err_labels = await _get_window_form_labels(
-                    self.hass, "config", "windows", num_ranges=num_ranges_for_collect
-                )
-                schema = _build_single_window_multi_range_schema(
-                    err_labels,
-                    user_input.get("source_name") or default_name,
-                    w_name or "",
-                    cost,
-                    [{"start": s, "end": e} for s, e in ranges],
-                    include_add_another=True,
-                    include_delete=False,
-                    num_slots=num_ranges_for_collect,
-                )
-                return self.async_show_form(
-                    step_id="windows",
-                    data_schema=schema,
-                    errors={"base": "source_already_in_use"},
-                    description_placeholders={
-                        "entry_title": existing.title or defaults["entry_title"]
-                    },
-                )
             windows = [
                 {
                     CONF_WINDOW_NAME: w_name or None,
@@ -2000,17 +1975,17 @@ def _build_source_entity_schema(
 
 def _build_source_entities_manage_schema(
     *,
-    available_entities: list[str],
     selected_entities: list[str],
 ) -> vol.Schema:
-    """Build schema for managing associated source entities as a multi-select list."""
-    config_kwargs: dict[str, Any] = {"domain": "sensor", "multiple": True}
-    if available_entities:
-        config_kwargs["include_entities"] = available_entities
+    """Build schema for managing source entities as a multi-select list.
+
+    Keep the selector open to all sensor entities so users can add new sources
+    beyond those selected during initial setup.
+    """
     return vol.Schema(
         {
             vol.Required(CONF_ENTITIES, default=selected_entities): selector.EntitySelector(
-                selector.EntitySelectorConfig(**config_kwargs)
+                selector.EntitySelectorConfig(domain="sensor", multiple=True)
             )
         }
     )
@@ -2413,31 +2388,10 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 return self.async_show_form(
                     step_id="source_entity",
                     data_schema=_build_source_entities_manage_schema(
-                        available_entities=available_source_entities,
                         selected_entities=selected_entities,
                     ),
                     errors={"base": "source_entity_required"},
                 )
-
-            for requested_entity in requested_entities:
-                existing_entry = _entry_using_source_entity(
-                    self.hass,
-                    requested_entity,
-                    exclude_entry_id=self._config_entry.entry_id,
-                )
-                if existing_entry is not None:
-                    return self.async_show_form(
-                        step_id="source_entity",
-                        data_schema=_build_source_entities_manage_schema(
-                            available_entities=available_source_entities,
-                            selected_entities=requested_entities,
-                        ),
-                        errors={"base": "source_already_in_use"},
-                        description_placeholders={
-                            "entry_title": existing_entry.title
-                            or defaults["entry_title"]
-                        },
-                    )
 
             # Always treat entity changes as replacement: old associated entity rows
             # are removed and the selected set becomes the new source set.
@@ -2476,7 +2430,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
         return self.async_show_form(
             step_id="source_entity",
             data_schema=_build_source_entities_manage_schema(
-                available_entities=available_source_entities,
                 selected_entities=selected_entities,
             ),
         )
