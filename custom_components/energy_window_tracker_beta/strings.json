@@ -144,6 +144,7 @@
     },
     "error": {
       "window_start_after_end": "Start time must be earlier than end time.",
+      "window_name_required": "Window name is required.",
       "at_least_one_window": "At least one window is required (start time before end time).",
       "range_start_before_previous_end": "Each range must start at or after the previous range's end time. Add ranges in chronological order (earliest first).",
       "duplicate_window_name": "Window name already exists. Use a unique window name.",
@@ -187,16 +188,10 @@
         "description": "Changing the source will **permanently delete all historical data** for the current source. The source name will be re-used.",
         "submit": "Continue"
       },
-      "select_source_entity": {
-        "title": "Manage energy source(s)",
-        "data": {
-          "source_entity_to_manage": "Source entity to manage"
-        },
-        "submit": "Next"
-      },
       "source_entity": {
         "title": "Manage energy source(s)",
         "data": {
+          "source_entity_to_manage": "Source entity to manage",
           "source_entity": "Energy source",
           "remove_previous_entities": "❌ Delete the previously associated windows (otherwise you may manually remove them)"
         },
@@ -279,6 +274,7 @@
     },
     "error": {
       "window_start_after_end": "Start time must be earlier than end time.",
+      "window_name_required": "Window name is required.",
       "at_least_one_window": "At least one window is required.",
       "range_start_before_previous_end": "Each range must start at or after the previous range's end time. Add ranges in chronological order (earliest first).",
       "duplicate_window_name": "Window name already exists. Use a unique window name.",

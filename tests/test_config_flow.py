@@ -68,6 +68,28 @@ async def test_window_setup_unhappy_overlap_ranges_rejected(
 
 
 @pytest.mark.asyncio
+async def test_window_setup_unhappy_requires_window_name(
+    hass: HomeAssistant,
+) -> None:
+    """[Unhappy] window_setup rejects empty window name."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "",
+            "cost_per_kwh": 0.2,
+            "start_1": "09:00",
+            "end_1": "12:00",
+        },
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "window_setup"
+    assert result.get("errors", {}).get("base") == "window_name_required"
+
+
+@pytest.mark.asyncio
 async def test_window_entities_unhappy_requires_at_least_one_entity(
     hass: HomeAssistant,
 ) -> None:
@@ -105,7 +127,7 @@ async def test_options_flow_happy_opens_from_window_setup_entry(
     )
     assert result["type"] is data_entry_flow.FlowResultType.MENU
     assert result["step_id"] == "init"
-    assert result.get("title") == "Peak"
+    assert result.get("title") == "Configure Peak"
 
 
 @pytest.mark.asyncio
@@ -211,11 +233,6 @@ async def test_options_source_entity_happy_multiple_sources_prompts_selection_fi
         result["flow_id"], {"next_step_id": "source_entity"}
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "select_source_entity"
-
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"source_entity_to_manage": "sensor.today_import"}
-    )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
     assert result["step_id"] == "source_entity"
 
@@ -285,6 +302,31 @@ async def test_options_add_window_unhappy_duplicate_name_rejected(
     assert result["type"] is data_entry_flow.FlowResultType.FORM
     assert result["step_id"] == "add_window"
     assert result.get("errors", {}).get("base") == "duplicate_window_name"
+
+
+@pytest.mark.asyncio
+async def test_options_add_window_unhappy_requires_window_name(
+    hass: HomeAssistant, mock_legacy_config_entry
+) -> None:
+    """[Unhappy] options add_window rejects empty window name."""
+    result = await hass.config_entries.options.async_init(mock_legacy_config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "add_window"}
+    )
+    assert result["step_id"] == "add_window"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "",
+            CONF_COST_PER_KWH: 0.1,
+            "start_1": "00:00",
+            "end_1": "07:00",
+        },
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "add_window"
+    assert result.get("errors", {}).get("base") == "window_name_required"
 
 
 @pytest.mark.asyncio
@@ -471,10 +513,6 @@ async def test_options_source_entity_happy_update_preserves_other_sources(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "source_entity"}
     )
-    assert result["step_id"] == "select_source_entity"
-    result = await hass.config_entries.options.async_configure(
-        result["flow_id"], {"source_entity_to_manage": "sensor.today_load"}
-    )
     assert result["step_id"] == "source_entity"
 
     result = await hass.config_entries.options.async_configure(
@@ -557,6 +595,80 @@ async def test_options_edit_window_happy_windows_based_preserves_all_entities(
         if isinstance(src, dict) and src.get(CONF_SOURCE_ENTITY)
     }
     assert entities == {"sensor.today_load", "sensor.today_import"}
+
+
+@pytest.mark.asyncio
+async def test_options_add_window_unhappy_duplicate_name_in_other_source_rejected(
+    hass: HomeAssistant,
+) -> None:
+    """[Unhappy] Duplicate window name is rejected even if it exists on another source."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Energy Window Tracker (Beta)",
+        data={
+            CONF_SOURCES: [
+                {
+                    CONF_SOURCE_ENTITY: "sensor.today_load",
+                    CONF_NAME: "Load",
+                    CONF_WINDOWS: [
+                        {
+                            CONF_WINDOW_NAME: "ZEROHERO",
+                            CONF_WINDOW_START: "09:00",
+                            CONF_WINDOW_END: "11:00",
+                            CONF_COST_PER_KWH: 0.2,
+                        }
+                    ],
+                },
+                {
+                    CONF_SOURCE_ENTITY: "sensor.today_import",
+                    CONF_NAME: "Import",
+                    CONF_WINDOWS: [
+                        {
+                            CONF_WINDOW_NAME: "Import Peak",
+                            CONF_WINDOW_START: "12:00",
+                            CONF_WINDOW_END: "14:00",
+                            CONF_COST_PER_KWH: 0.3,
+                        }
+                    ],
+                },
+            ]
+        },
+        options={},
+        entry_id="duplicate_name_other_source",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "source_entity"}
+    )
+    assert result["step_id"] == "source_entity"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_SOURCE_ENTITY: "sensor.today_import",
+            "remove_previous_entities": False,
+        },
+    )
+    assert result["step_id"] == "options_saved"
+    result = await hass.config_entries.options.async_configure(result["flow_id"], {})
+    assert result["step_id"] == "init"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "add_window"}
+    )
+    assert result["step_id"] == "add_window"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "ZEROHERO",
+            CONF_COST_PER_KWH: 0.1,
+            "start_1": "15:00",
+            "end_1": "16:00",
+        },
+    )
+    assert result["step_id"] == "add_window"
+    assert result.get("errors", {}).get("base") == "duplicate_window_name"
 
 
 @pytest.mark.asyncio

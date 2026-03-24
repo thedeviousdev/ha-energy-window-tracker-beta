@@ -78,6 +78,8 @@ async def test_window_setup_happy_create_entry_and_sensor(hass: HomeAssistant) -
     finish_result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert finish_result["type"] is data_entry_flow.FlowResultType.MENU
     assert finish_result["step_id"] == "configure_menu"
+    menu_options = finish_result.get("menu_options") or {}
+    assert "done" not in menu_options
 
     # Options flow should also load for windows-based entries.
     # Historically this integration only supported the legacy CONF_SOURCES format in options.
