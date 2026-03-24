@@ -717,3 +717,56 @@ async def test_unique_ids_happy_stay_stable_when_window_renamed(
         "Off-Peak should keep same unique_id and entity_id"
     )
     assert peak_uid in set(after.values())
+
+
+@pytest.mark.asyncio
+async def test_options_rename_happy_preserves_unique_ids_and_history_identity(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Renaming via options flow keeps unique IDs stable."""
+    entry = _windows_based_entry(
+        entry_id="options_rename_stable_id",
+        window_groups=[
+            {
+                CONF_WINDOW_NAME: "ZEROCHARGE",
+                CONF_COST_PER_KWH: 0.0,
+                CONF_ENTITIES: ["sensor.today_load"],
+                CONF_RANGES: [{CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "12:00"}],
+            }
+        ],
+        title="ZEROCHARGE",
+    )
+    entry.add_to_hass(hass)
+    hass.states.async_set("sensor.today_load", "0")
+
+    with patch(
+        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+        new_callable=AsyncMock,
+        return_value={},
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    before = _unique_ids_by_entity_id(hass, entry.entry_id)
+    assert before
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "list_windows"}
+    )
+    assert result["step_id"] == "edit_window"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "ZEROCHARGE2",
+            CONF_COST_PER_KWH: 0.0,
+            "start_1": "09:00:00",
+            "end_1": "12:00:00",
+        },
+    )
+    assert result["step_id"] == "options_saved"
+    await hass.async_block_till_done()
+
+    after = _unique_ids_by_entity_id(hass, entry.entry_id)
+    assert after
+    assert set(after.values()) == set(before.values())

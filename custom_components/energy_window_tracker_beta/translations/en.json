@@ -97,8 +97,7 @@
           "end_9": "End time #9",
           "start_10": "Start time #10",
           "end_10": "End time #10",
-          "add_another": "Add another time range",
-          "delete_this_window": "❌ Delete?"
+          "add_another": "Add another time range"
         }
       },
       "window_setup": {
@@ -170,8 +169,8 @@
       "init": {
         "title": "Configure Energy Window Tracker (Beta)",
         "menu_options": {
-          "list_windows": "✏️ Edit window",
-          "source_entity": "⚡️ Manage energy source(s)"
+          "list_windows": "\u270f\ufe0f Edit window",
+          "source_entity": "\u26a1\ufe0f Manage energy source(s)"
         }
       },
       "manage_windows": {
