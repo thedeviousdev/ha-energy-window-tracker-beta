@@ -194,9 +194,7 @@
       "source_entity": {
         "title": "Manage energy source(s)",
         "data": {
-          "source_entity_to_manage": "Source entity to manage",
-          "source_entity": "Energy source",
-          "remove_previous_entities": "❌ Delete the previously associated windows (otherwise you may manually remove them)"
+          "entities": "Entities"
         },
         "submit": "Update"
       },
