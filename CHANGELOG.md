@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.52](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.51...v2.3.52) (2026-03-24)
+
+
+### Bug Fixes
+
+* **branding:** invert light/dark asset variants ([#30](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/30)) ([2ba42cb](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/2ba42cb99b48227e95087000deb2c2cb4491d9e3))
+
 ## [2.3.51](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.50...v2.3.51) (2026-03-24)
 
 
