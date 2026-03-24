@@ -17,8 +17,8 @@ from homeassistant.helpers import entity_registry as er
 from homeassistant.util import dt as dt_util
 
 from custom_components.energy_window_tracker_beta.const import (
-    CONF_IMPORT_RATE_PER_KWH,
     CONF_ENTITIES,
+    CONF_IMPORT_RATE_PER_KWH,
     CONF_NAME,
     CONF_SOURCE_ENTITY,
     CONF_SOURCES,

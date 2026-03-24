@@ -14,8 +14,8 @@ from custom_components.energy_window_tracker_beta.config_flow import (
     _get_sources_from_entry,
 )
 from custom_components.energy_window_tracker_beta.const import (
-    CONF_IMPORT_RATE_PER_KWH,
     CONF_ENTITIES,
+    CONF_IMPORT_RATE_PER_KWH,
     CONF_NAME,
     CONF_RANGES,
     CONF_SOURCE_ENTITY,

@@ -8,8 +8,8 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.energy_window_tracker_beta.const import (
-    CONF_IMPORT_RATE_PER_KWH,
     CONF_ENTITIES,
+    CONF_IMPORT_RATE_PER_KWH,
     CONF_RANGES,
     CONF_WINDOW_END,
     CONF_WINDOW_NAME,

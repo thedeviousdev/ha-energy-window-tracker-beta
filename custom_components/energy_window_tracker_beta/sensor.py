@@ -30,9 +30,9 @@ from .const import (
     ATTR_COST,
     ATTR_SOURCE_ENTITY,
     ATTR_STATUS,
-    CONF_IMPORT_RATE_PER_KWH,
-    CONF_EXPORT_RATE_PER_KWH,
     CONF_ENTITIES,
+    CONF_EXPORT_RATE_PER_KWH,
+    CONF_IMPORT_RATE_PER_KWH,
     CONF_NAME,
     CONF_RANGES,
     CONF_SOURCE_ENTITY,
@@ -831,8 +831,6 @@ class WindowEnergySensor(RestoreSensor):
                     )
             if r.import_rate_per_kwh and r.import_rate_per_kwh > 0:
                 rates.append(r.import_rate_per_kwh)
-            if r.export_rate_per_kwh and r.export_rate_per_kwh > 0:
-                attrs_export_rate = r.export_rate_per_kwh
             range_attrs.append(
                 {
                     "start": _time_str(r.start_h, r.start_m, r.start_s),

@@ -35,9 +35,9 @@ from homeassistant.helpers import selector
 from homeassistant.helpers.translation import async_get_translations
 
 from .const import (
-    CONF_IMPORT_RATE_PER_KWH,
-    CONF_EXPORT_RATE_PER_KWH,
     CONF_ENTITIES,
+    CONF_EXPORT_RATE_PER_KWH,
+    CONF_IMPORT_RATE_PER_KWH,
     CONF_NAME,
     CONF_RANGES,
     CONF_SOURCE_ENTITY,
