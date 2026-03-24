@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.54](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.53...v2.3.54) (2026-03-24)
+
+
+### Refactoring
+
+* **flow:** remove legacy source-first compatibility ([#34](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/34)) ([906b21a](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/906b21aba8d83ae7eb0dea6c953a82c8cabf2706))
+
 ## [2.3.53](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.52...v2.3.53) (2026-03-24)
 
 
