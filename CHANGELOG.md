@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.3.50](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.49...v2.3.50) (2026-03-24)
+
+
+### Bug Fixes
+
+* **flow:** dynamic configure title and single source-management form ([#22](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/22)) ([ebc71cc](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/ebc71cc47cae4a7d207a5f34a99b06154b74abbb))
+
+
+### Miscellaneous Chores
+
+* **branding:** add light/dark logo assets ([#25](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/25)) ([20a19dd](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/20a19dd018d6c76b0298e7d6164cc9bc2d73b371))
+
 ## [2.3.49](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.48...v2.3.49) (2026-03-24)
 
 
