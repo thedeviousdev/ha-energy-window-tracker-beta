@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.47](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.46...v2.3.47) (2026-03-24)
+
+
+### Bug Fixes
+
+* **config-flow:** avoid non-serializable time schema validators ([#16](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/16)) ([c46335b](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/c46335b46d4b0885e31536cc9deaa6dbb4658e64))
+
 ## [2.3.46](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.45...v2.3.46) (2026-03-23)
 
 
