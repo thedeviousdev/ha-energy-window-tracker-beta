@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from homeassistant import config_entries, data_entry_flow
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.energy_window_tracker_beta.const import (
@@ -20,6 +21,7 @@ from custom_components.energy_window_tracker_beta.const import (
     CONF_WINDOW_START,
     CONF_WINDOWS,
     DOMAIN,
+    source_slug_from_entity_id,
 )
 
 
@@ -567,6 +569,94 @@ async def test_options_source_entity_happy_update_replaces_source_set(
         if isinstance(src, dict) and src.get(CONF_SOURCE_ENTITY)
     }
     assert entities == {"sensor.today_import"}
+
+
+@pytest.mark.asyncio
+async def test_options_source_entity_happy_remove_one_keeps_other_registry_entities(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Removing one source entity only removes that source's sensors."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Energy Window Tracker (Beta)",
+        data={
+            CONF_SOURCES: [
+                {
+                    CONF_SOURCE_ENTITY: "sensor.today_load",
+                    CONF_NAME: "Load",
+                    CONF_WINDOWS: [
+                        {
+                            CONF_WINDOW_NAME: "Peak",
+                            CONF_WINDOW_START: "09:00",
+                            CONF_WINDOW_END: "11:00",
+                            CONF_COST_PER_KWH: 0.2,
+                        }
+                    ],
+                },
+                {
+                    CONF_SOURCE_ENTITY: "sensor.today_import",
+                    CONF_NAME: "Import",
+                    CONF_WINDOWS: [
+                        {
+                            CONF_WINDOW_NAME: "Peak",
+                            CONF_WINDOW_START: "09:00",
+                            CONF_WINDOW_END: "11:00",
+                            CONF_COST_PER_KWH: 0.2,
+                        }
+                    ],
+                },
+            ]
+        },
+        options={},
+        entry_id="remove_one_keeps_other",
+    )
+    entry.add_to_hass(hass)
+
+    registry = er.async_get(hass)
+    load_slug = source_slug_from_entity_id("sensor.today_load")
+    import_slug = source_slug_from_entity_id("sensor.today_import")
+    load_entity = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_{load_slug}_window_keep",
+        config_entry=entry,
+        suggested_object_id="keep_entity",
+    )
+    import_entity = registry.async_get_or_create(
+        "sensor",
+        DOMAIN,
+        f"{entry.entry_id}_{import_slug}_window_remove",
+        config_entry=entry,
+        suggested_object_id="remove_entity",
+    )
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "source_entity"}
+    )
+    assert result["step_id"] == "source_entity"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {CONF_ENTITIES: ["sensor.today_load"]}
+    )
+    assert result["step_id"] == "options_saved"
+
+    assert registry.async_get(load_entity.entity_id) is not None
+    assert registry.async_get(import_entity.entity_id) is None
+
+    saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert saved_entry is not None
+    sources = (
+        saved_entry.options.get(CONF_SOURCES)
+        or saved_entry.data.get(CONF_SOURCES)
+        or []
+    )
+    persisted_entities = {
+        src.get(CONF_SOURCE_ENTITY)
+        for src in sources
+        if isinstance(src, dict) and src.get(CONF_SOURCE_ENTITY)
+    }
+    assert persisted_entities == {"sensor.today_load"}
 
 
 @pytest.mark.asyncio
@@ -1182,3 +1272,46 @@ async def test_config_source_entity_happy_loads_after_window_setup_finish(
     )
     assert result["type"] is data_entry_flow.FlowResultType.MENU
     assert result["step_id"] == "configure_menu"
+
+
+@pytest.mark.asyncio
+async def test_config_list_windows_happy_loads_after_window_setup_finish(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Edit window opens from configure menu after setup finish."""
+    hass.states.async_set("sensor.today_load", "1.0")
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            "cost_per_kwh": 0.2,
+            "start_1": "09:00:00",
+            "end_1": "11:00:00",
+        },
+    )
+    assert result["step_id"] == "window_entities"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"entities": ["sensor.today_load"]}
+    )
+    assert result["step_id"] == "window_entities_confirm"
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is data_entry_flow.FlowResultType.MENU
+    assert result["step_id"] == "configure_menu"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "list_windows"}
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "list_windows"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"window_index": "0"}
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "edit_window"
