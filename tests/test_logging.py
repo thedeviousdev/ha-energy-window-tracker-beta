@@ -18,6 +18,7 @@ from homeassistant.util import dt as dt_util
 
 from custom_components.energy_window_tracker_beta.const import (
     CONF_COST_PER_KWH,
+    CONF_ENTITIES,
     CONF_NAME,
     CONF_SOURCE_ENTITY,
     CONF_SOURCES,
@@ -157,8 +158,7 @@ async def test_options_flow_save_happy_logging(
         result = await hass.config_entries.options.async_configure(
             result["flow_id"],
             {
-                CONF_SOURCE_ENTITY: "sensor.today_import",
-                "remove_previous_entities": True,
+                CONF_ENTITIES: ["sensor.today_load"],
             },
         )
 
@@ -167,8 +167,7 @@ async def test_options_flow_save_happy_logging(
     await hass.async_block_till_done()
 
     messages = _component_messages(caplog)
-    assert "options flow: built options entry_id=" in messages
-    assert "source_entity=" in messages
+    assert "options flow: options saved (entry_id=" in messages
 
 
 @pytest.mark.asyncio

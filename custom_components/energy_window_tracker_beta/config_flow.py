@@ -32,7 +32,6 @@ from homeassistant import config_entries, data_entry_flow
 from homeassistant.core import callback
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers import selector
-from homeassistant.helpers.storage import Store
 from homeassistant.helpers.translation import async_get_translations
 
 from .const import (
@@ -53,8 +52,6 @@ from .const import (
     DEFAULT_WINDOW_FALLBACK_KEY,
     DEFAULT_WINDOW_START,
     DOMAIN,
-    STORAGE_KEY,
-    STORAGE_VERSION,
     source_slug_from_entity_id,
 )
 
@@ -1584,6 +1581,74 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             "config flow step source_entity: user_input=%s",
             "submitted" if user_input is not None else "show form",
         )
+        # Windows-based setup path: entry already exists and there is no legacy
+        # pending source row. Edit the existing entry's first source instead.
+        if (
+            (not self._pending_sources or not isinstance(self._pending_sources[0], dict))
+            and self._pending_setup_entry_id
+        ):
+            existing_entry = self.hass.config_entries.async_get_entry(
+                self._pending_setup_entry_id
+            )
+            if existing_entry is None:
+                return await self.async_step_configure_menu(None)
+
+            sources = _get_sources_from_entry(existing_entry)
+            if not sources or not isinstance(sources[0], dict):
+                return await self.async_step_configure_menu(None)
+
+            source_row = sources[0]
+            source_entity = str(source_row.get(CONF_SOURCE_ENTITY) or DEFAULT_SOURCE_ENTITY)
+            defaults = await _get_config_defaults(self.hass)
+            current_name = str(
+                source_row.get(CONF_NAME)
+                or _get_entity_friendly_name(self.hass, source_entity, defaults["window_name"])
+            )
+
+            if user_input is not None and CONF_SOURCE_ENTITY in user_input:
+                new_entity = (
+                    _normalize_entity_selector_value(user_input.get(CONF_SOURCE_ENTITY))
+                    or source_entity
+                )
+                if new_entity and new_entity != source_entity:
+                    windows = _normalize_windows_for_schema(
+                        existing_entry.data.get(CONF_WINDOWS) or []
+                    )
+                    rewritten_windows: list[dict[str, Any]] = []
+                    for window in windows:
+                        if not isinstance(window, dict):
+                            continue
+                        entities = window.get(CONF_ENTITIES) or []
+                        if not isinstance(entities, list):
+                            entities = []
+                        rewritten_entities: list[str] = []
+                        for entity in entities:
+                            entity_text = str(entity or "").strip()
+                            if not entity_text:
+                                continue
+                            if entity_text == source_entity:
+                                rewritten_entities.append(new_entity)
+                            else:
+                                rewritten_entities.append(entity_text)
+                        if source_entity in entities and new_entity not in rewritten_entities:
+                            rewritten_entities.append(new_entity)
+                        rewritten_window = dict(window)
+                        rewritten_window[CONF_ENTITIES] = rewritten_entities
+                        rewritten_windows.append(rewritten_window)
+
+                    self._setup_windows = rewritten_windows
+                    self.hass.config_entries.async_update_entry(
+                        existing_entry,
+                        data={CONF_WINDOWS: rewritten_windows},
+                    )
+                return await self.async_step_configure_menu(None)
+
+            _MAIN_LOGGER.warning("config flow: showing form step_id=source_entity")
+            return self.async_show_form(
+                step_id="source_entity",
+                data_schema=_build_source_entity_schema(source_entity, current_name),
+            )
+
         if user_input is not None and CONF_SOURCE_ENTITY in user_input:
             new_entity = user_input.get(CONF_SOURCE_ENTITY) or ""
             if new_entity and self._pending_sources:
@@ -1933,6 +1998,24 @@ def _build_source_entity_schema(
     return vol.Schema(schema_dict)
 
 
+def _build_source_entities_manage_schema(
+    *,
+    available_entities: list[str],
+    selected_entities: list[str],
+) -> vol.Schema:
+    """Build schema for managing associated source entities as a multi-select list."""
+    config_kwargs: dict[str, Any] = {"domain": "sensor", "multiple": True}
+    if available_entities:
+        config_kwargs["include_entities"] = available_entities
+    return vol.Schema(
+        {
+            vol.Required(CONF_ENTITIES, default=selected_entities): selector.EntitySelector(
+                selector.EntitySelectorConfig(**config_kwargs)
+            )
+        }
+    )
+
+
 def _get_start_end_from_input(user_input: dict[str, Any]) -> tuple[str, str]:
     """Get start and end time strings from form input (keys 'start'/'end')."""
     start = _time_to_str(user_input.get("start") or "00:00")
@@ -2006,11 +2089,14 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
     def _menu_title_from_current_windows(self) -> str:
         """Build options menu title from the first configured window name."""
         try:
-            source = self._get_current_source()
-            windows = _normalize_windows_for_schema(source.get(CONF_WINDOWS) or [])
-            names = _unique_window_names(windows)
-            if names:
-                return _configure_title(names[0])
+            sources = _get_sources_from_entry(self._config_entry)
+            for source in sources:
+                if not isinstance(source, dict):
+                    continue
+                windows = _normalize_windows_for_schema(source.get(CONF_WINDOWS) or [])
+                names = _unique_window_names(windows)
+                if names:
+                    return _configure_title(names[0])
         except Exception:  # noqa: BLE001
             pass
         return _configure_title(self._config_entry.title)
@@ -2297,7 +2383,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
     async def async_step_source_entity(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Change the source entity (form). Checkbox controls whether to remove previous entities."""
+        """Manage associated source entities via a single multi-select field."""
         _MAIN_LOGGER.warning(
             "options flow step source_entity: user_input=%s",
             "submitted" if user_input is not None else "show form",
@@ -2313,79 +2399,49 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             if str(source.get(CONF_SOURCE_ENTITY) or "").strip()
         ]
 
-        if user_input is not None and "source_entity_to_manage" in user_input:
-            selected_entity = _normalize_entity_selector_value(
-                user_input.get("source_entity_to_manage")
-            ) or str(user_input.get("source_entity_to_manage") or "").strip()
-            if selected_entity:
-                self._source_entity_to_edit = selected_entity
-
         src = self._get_current_source()
         source_entity = str(src.get(CONF_SOURCE_ENTITY) or DEFAULT_SOURCE_ENTITY)
         windows = _normalize_windows_for_schema(src.get(CONF_WINDOWS) or [])
         defaults = await _get_config_defaults(self.hass)
-        current_name = str(src.get(CONF_NAME) or "") or _get_entity_friendly_name(
-            self.hass, source_entity, defaults["window_name"]
-        )
+        selected_entities = available_source_entities or [source_entity]
 
-        if user_input is not None and CONF_SOURCE_ENTITY in user_input:
-            new_entity = (
-                _normalize_entity_selector_value(user_input.get(CONF_SOURCE_ENTITY))
-                or source_entity
+        if user_input is not None and CONF_ENTITIES in user_input:
+            requested_entities = _normalize_entities_selector_value(
+                user_input.get(CONF_ENTITIES)
             )
-            if not new_entity:
+            if not requested_entities:
                 return self.async_show_form(
                     step_id="source_entity",
-                    data_schema=_build_source_entity_schema(
-                        source_entity,
-                        current_name,
-                        include_remove_previous=True,
-                        source_entities_to_manage=available_source_entities,
-                        selected_source_entity=self._source_entity_to_edit
-                        or source_entity,
+                    data_schema=_build_source_entities_manage_schema(
+                        available_entities=available_source_entities,
+                        selected_entities=selected_entities,
                     ),
+                    errors={"base": "source_entity_required"},
                 )
-            existing_entry = _entry_using_source_entity(
-                self.hass, new_entity, exclude_entry_id=self._config_entry.entry_id
-            )
-            if existing_entry is not None:
-                return self.async_show_form(
-                    step_id="source_entity",
-                    data_schema=_build_source_entity_schema(
-                        source_entity,
-                        current_name,
-                        include_remove_previous=True,
-                        source_entities_to_manage=available_source_entities,
-                        selected_source_entity=self._source_entity_to_edit
-                        or source_entity,
-                    ),
-                    errors={"base": "source_already_in_use"},
-                    description_placeholders={
-                        "entry_title": existing_entry.title or defaults["entry_title"]
-                    },
-                )
-            remove_previous = bool(user_input.get("remove_previous_entities"))
-            current_normalized = (
-                _normalize_entity_selector_value(source_entity) or source_entity
-            )
-            if remove_previous and new_entity == current_normalized:
-                return self.async_show_form(
-                    step_id="source_entity",
-                    data_schema=_build_source_entity_schema(
-                        source_entity,
-                        current_name,
-                        include_remove_previous=True,
-                        source_entities_to_manage=available_source_entities,
-                        selected_source_entity=self._source_entity_to_edit
-                        or source_entity,
-                    ),
-                    errors={"base": "remove_previous_but_source_unchanged"},
-                )
-            source_name = _get_entity_friendly_name(
-                self.hass, new_entity, defaults["window_name"]
-            )
 
-            if remove_previous:
+            for requested_entity in requested_entities:
+                existing_entry = _entry_using_source_entity(
+                    self.hass,
+                    requested_entity,
+                    exclude_entry_id=self._config_entry.entry_id,
+                )
+                if existing_entry is not None:
+                    return self.async_show_form(
+                        step_id="source_entity",
+                        data_schema=_build_source_entities_manage_schema(
+                            available_entities=available_source_entities,
+                            selected_entities=requested_entities,
+                        ),
+                        errors={"base": "source_already_in_use"},
+                        description_placeholders={
+                            "entry_title": existing_entry.title
+                            or defaults["entry_title"]
+                        },
+                    )
+
+            # Always treat entity changes as replacement: old associated entity rows
+            # are removed and the selected set becomes the new source set.
+            if set(requested_entities) != set(available_source_entities):
                 registry = er.async_get(self.hass)
                 for entity_entry in registry.entities.get_entries_for_config_entry_id(
                     self._config_entry.entry_id
@@ -2395,50 +2451,33 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                         and entity_entry.platform == DOMAIN
                     ):
                         registry.async_remove(entity_entry.entity_id)
-            else:
-                registry = er.async_get(self.hass)
-                retain_ids = []
-                for entity_entry in registry.entities.get_entries_for_config_entry_id(
-                    self._config_entry.entry_id
-                ):
-                    if (
-                        entity_entry.domain == "sensor"
-                        and entity_entry.platform == DOMAIN
-                    ):
-                        retain_ids.append(entity_entry.unique_id)
-                self._retain_ids_after_save = retain_ids
 
-            store = Store(
-                self.hass,
-                STORAGE_VERSION,
-                f"{STORAGE_KEY}_{self._config_entry.entry_id}_{source_slug_from_entity_id(source_entity)}",
-            )
-            await store.async_save({})
+            new_sources: list[dict[str, Any]] = []
+            for requested_entity in requested_entities:
+                source_name = _get_entity_friendly_name(
+                    self.hass, requested_entity, defaults["window_name"]
+                )
+                new_sources.append(
+                    {
+                        CONF_NAME: source_name,
+                        CONF_SOURCE_ENTITY: requested_entity,
+                        CONF_WINDOWS: [dict(window) for window in windows],
+                    }
+                )
 
-            options_to_persist = await self._save_source(
-                new_entity,
-                windows,
-                source_name=source_name,
-                previous_source_entity=source_entity,
-            )
-            if getattr(self, "_retain_ids_after_save", None) is not None:
-                options_to_persist = {
-                    **options_to_persist,
-                    "_retain_entity_unique_ids": self._retain_ids_after_save,
-                }
-                del self._retain_ids_after_save
-            self._source_entity_to_edit = new_entity
+            options_to_persist = {
+                **(self._config_entry.options or {}),
+                CONF_SOURCES: new_sources,
+            }
+            self._source_entity_to_edit = requested_entities[0]
             return self._async_create_options_entry(options_to_persist)
 
         _MAIN_LOGGER.warning("options flow: showing form step_id=source_entity")
         return self.async_show_form(
             step_id="source_entity",
-            data_schema=_build_source_entity_schema(
-                source_entity,
-                current_name,
-                include_remove_previous=True,
-                source_entities_to_manage=available_source_entities,
-                selected_source_entity=self._source_entity_to_edit or source_entity,
+            data_schema=_build_source_entities_manage_schema(
+                available_entities=available_source_entities,
+                selected_entities=selected_entities,
             ),
         )
 
