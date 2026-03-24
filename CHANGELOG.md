@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.49](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.48...v2.3.49) (2026-03-24)
+
+
+### Bug Fixes
+
+* **flow:** preserve multi-source edits, unique window names, and sensor naming ([#20](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/20)) ([6774fcc](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/6774fccc1e046d63aa86c253a4ab9e13f87047c0))
+
 ## [2.3.48](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.47...v2.3.48) (2026-03-24)
 
 
