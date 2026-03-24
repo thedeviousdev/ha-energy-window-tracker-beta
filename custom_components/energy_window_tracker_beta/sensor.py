@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import re
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -49,39 +48,20 @@ from .const import (
 
 _MAIN_LOGGER = logging.getLogger("custom_components.energy_window_tracker_beta")
 
-_RE_NON_SLUG = re.compile(r"[^a-z0-9_]+")
+def _stable_window_unique_id(entry_id: str, source_slug: str, group_key: str) -> str:
+    """Stable unique_id for a window sensor, independent of window name."""
+    digest = hashlib.md5(group_key.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
+    return f"{entry_id}_{source_slug}_window_{digest}"
 
 
-def _window_slug(window_name: str) -> str:
-    """Make a stable slug for a window name (unique_id component)."""
-    base = (window_name or "").strip().lower().replace(" ", "_")
-    base = _RE_NON_SLUG.sub("_", base).strip("_")
-    return (base or "window")[:48]
-
-
-def _stable_window_unique_id(entry_id: str, source_slug: str, window_name: str) -> str:
-    """Stable unique_id for a window sensor.
-
-    Includes a short hash to avoid collisions when different names slugify the same.
-    """
-    slug = _window_slug(window_name)
-    h = hashlib.md5(
-        (window_name or "").encode("utf-8"), usedforsecurity=False
-    ).hexdigest()[:8]
-    return f"{entry_id}_{source_slug}_{slug}_{h}"
-
-
-def _window_name_from_original_name(original_name: str, source_slug: str) -> str:
-    """Best-effort extraction of window name from entity registry original_name.
-
-    Older versions used name formats like "{source_slug} {window_name}" during setup,
-    so entity registry original_name may include the source slug prefix.
-    """
-    name = (original_name or "").strip()
-    prefix = f"{(source_slug or '').strip()} "
-    if prefix.strip() and name.startswith(prefix):
-        return name[len(prefix) :].strip()
-    return name
+def _source_display_name(hass: HomeAssistant, source_entity: str) -> str:
+    """Friendly display label for source entity."""
+    state = hass.states.get(source_entity)
+    if state:
+        friendly = state.attributes.get("friendly_name")
+        if isinstance(friendly, str) and friendly.strip():
+            return friendly.strip()
+    return source_entity
 
 
 @dataclass
@@ -584,21 +564,7 @@ async def async_setup_entry(
             STORAGE_VERSION,
             f"{STORAGE_KEY}_{entry.entry_id}_{slug}",
         )
-        # Preserve existing unique_ids by window name so entity_ids don't reshuffle
-        # when window order changes (older versions used index-based unique_ids).
-        registry = er.async_get(hass)
-        existing_unique_id_by_name: dict[str, str] = {}
-        for entity_entry in registry.entities.get_entries_for_config_entry_id(
-            entry.entry_id
-        ):
-            if entity_entry.domain != "sensor" or entity_entry.platform != DOMAIN:
-                continue
-            if not entity_entry.unique_id.startswith(f"{entry.entry_id}_{slug}_"):
-                continue
-            if entity_entry.original_name:
-                key = _window_name_from_original_name(entity_entry.original_name, slug)
-                if key and key not in existing_unique_id_by_name:
-                    existing_unique_id_by_name[key] = entity_entry.unique_id
+        source_display_name = _source_display_name(hass, source_entity)
         # Use HA configured timezone so window start/end and "today" match the frontend
         tz_str = getattr(hass.config, "time_zone", None) or "UTC"
         tz = await hass.async_add_executor_job(dt_util.get_time_zone, tz_str)
@@ -628,10 +594,16 @@ async def async_setup_entry(
                 window_name,
                 len(ranges),
             )
+            group_parts = sorted(
+                f"{r.start_h:02d}:{r.start_m:02d}:{r.start_s:02d}-{r.end_h:02d}:{r.end_m:02d}:{r.end_s:02d}"
+                for r in ranges
+            )
+            group_key = "|".join(group_parts)
             sensor = WindowEnergySensor(
                 hass=hass,
                 entry_id=entry.entry_id,
                 config_name=source_name,
+                source_display_name=source_display_name,
                 window_name=window_name,
                 ranges=ranges,
                 data=data,
@@ -640,7 +612,7 @@ async def async_setup_entry(
                 source_slug=slug,
                 source_index=source_index,
                 name_index=name_index,
-                existing_unique_id=existing_unique_id_by_name.get(window_name),
+                unique_group_key=group_key,
             )
             all_sensors.append(sensor)
 
@@ -705,30 +677,32 @@ class WindowEnergySensor(RestoreSensor):
         hass: HomeAssistant,
         entry_id: str,
         config_name: str,
+        source_display_name: str,
         window_name: str,
         ranges: list[WindowConfig],
         data: WindowData,
         all_windows: list[WindowConfig],
+        unique_group_key: str,
         is_first: bool = False,
         source_slug: str | None = None,
         source_index: int = 0,
         name_index: int = 0,
-        existing_unique_id: str | None = None,
     ) -> None:
         self.hass = hass
         self._entry_id = entry_id
         self._window_name = window_name
+        self._source_display_name = source_display_name
         self._ranges = ranges
         self._data = data
         self._all_windows = all_windows
         self._is_first = is_first
-        self._attr_name = f"{source_slug} {window_name}" if source_slug else window_name
+        self._attr_name = f"{window_name} - {source_display_name}"
         if source_slug:
-            self._attr_unique_id = existing_unique_id or _stable_window_unique_id(
-                entry_id, source_slug, window_name
+            self._attr_unique_id = _stable_window_unique_id(
+                entry_id, source_slug, unique_group_key
             )
         else:
-            self._attr_unique_id = existing_unique_id or f"{entry_id}_{name_index}"
+            self._attr_unique_id = f"{entry_id}_{name_index}"
         self._last_source_value: float | None = None
         self._last_status: str | None = None
 
@@ -739,8 +713,7 @@ class WindowEnergySensor(RestoreSensor):
         )
         await super().async_added_to_hass()
 
-        # Friendly name is window name only (entity_id already includes source from __init__ name).
-        self._attr_name = self._window_name
+        self._attr_name = f"{self._window_name} - {self._source_display_name}"
 
         if (last := await self.async_get_last_sensor_data()) is not None:
             self._attr_native_value = last.native_value

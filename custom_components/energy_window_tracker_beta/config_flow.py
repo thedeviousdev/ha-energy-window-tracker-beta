@@ -774,14 +774,17 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_window_entities_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Confirmation after adding entities; send user back to the window edit form."""
+        """Confirmation after adding entities; continue to configure menu on Finish."""
+        if user_input is None:
+            return self.async_show_form(
+                step_id="window_entities_confirm",
+                data_schema=vol.Schema({}),
+                errors={},
+            )
         if not self._pending_setup_entry_id:
             # Should never happen, but keep the UX predictable.
             return await self.async_step_configure_menu(None)
-        # Home Assistant does not support chaining a different flow type (options)
-        # directly from within a config-flow step response. Return to the window
-        # edit form in the same modal instead.
-        return await self.async_step_window_setup(None)
+        return await self.async_step_configure_menu(None)
 
     async def async_step_windows(
         self, user_input: dict[str, Any] | None = None
@@ -1053,13 +1056,18 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     def _async_show_configure_menu(self) -> config_entries.FlowResult:
         """Show the Configure Energy Window Tracker (Beta) menu (config flow)."""
         _MAIN_LOGGER.warning("config flow: showing menu step_id=configure_menu")
+        menu_title = "Configure Energy Window Tracker (Beta)"
+        if self._setup_windows:
+            first_name = str(self._setup_windows[0].get(CONF_WINDOW_NAME) or "").strip()
+            if first_name:
+                menu_title = first_name
         return {
             "type": data_entry_flow.FlowResultType.MENU,
             "flow_id": self.flow_id,
             "handler": self.handler,
             "step_id": "configure_menu",
             "menu_options": _build_configure_menu_options_with_done(),
-            "title": "Configure Energy Window Tracker (Beta)",
+            "title": menu_title,
         }
 
     async def async_step_done(
@@ -1188,6 +1196,25 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 return self.async_show_form(
                     step_id="add_window", data_schema=schema, errors=errors
+                )
+            if _window_name_already_exists(
+                self._pending_sources[0].get(CONF_WINDOWS, []), w_name or ""
+            ):
+                ranges_for_form = [{"start": s, "end": e} for s, e in ranges]
+                schema = _build_single_window_multi_range_schema(
+                    labels,
+                    None,
+                    w_name or "",
+                    cost,
+                    ranges_for_form,
+                    include_add_another=True,
+                    include_delete=False,
+                    num_slots=num_ranges_for_collect,
+                )
+                return self.async_show_form(
+                    step_id="add_window",
+                    data_schema=schema,
+                    errors={"base": "duplicate_window_name"},
                 )
             if user_input.get("add_another"):
                 _MAIN_LOGGER.warning(
@@ -1427,6 +1454,28 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     data_schema=schema,
                     errors={"base": range_error},
                 )
+            raw_to_replace = (same_name[0].get(CONF_WINDOW_NAME) or "").strip()
+            if _window_name_already_exists(
+                windows,
+                w_name or "",
+                exclude_raw_name=raw_to_replace,
+            ):
+                ranges_for_form = [{"start": s, "end": e} for s, e in ranges_list]
+                schema = _build_single_window_multi_range_schema(
+                    labels,
+                    None,
+                    w_name or "",
+                    cost_val,
+                    ranges_for_form,
+                    include_add_another=True,
+                    include_delete=True,
+                    num_slots=num_ranges,
+                )
+                return self.async_show_form(
+                    step_id="edit_window",
+                    data_schema=schema,
+                    errors={"base": "duplicate_window_name"},
+                )
             if user_input.get("add_another"):
                 _MAIN_LOGGER.warning(
                     "config: edit_window - add another time range for %r (total %s)",
@@ -1454,7 +1503,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 )
                 return self.async_show_form(step_id="edit_window", data_schema=schema)
             name = (w_name or "").strip() or None
-            raw_to_replace = (same_name[0].get(CONF_WINDOW_NAME) or "").strip()
             new_windows = _replace_window_group_preserve_order(
                 windows, raw_to_replace, name, ranges_list, cost_val
             )
@@ -1655,6 +1703,26 @@ def _unique_window_names(windows: list[dict[str, Any]]) -> list[str]:
     return out
 
 
+def _window_name_already_exists(
+    windows: list[dict[str, Any]],
+    candidate_name: str,
+    *,
+    exclude_raw_name: str | None = None,
+) -> bool:
+    """Return True if candidate_name conflicts with another existing window name."""
+    candidate = (candidate_name or "").strip()
+    if not candidate:
+        return False
+    excluded = (exclude_raw_name or "").strip()
+    for window in windows:
+        raw_name = (window.get(CONF_WINDOW_NAME) or "").strip()
+        if excluded and raw_name == excluded:
+            continue
+        if raw_name and raw_name == candidate:
+            return True
+    return False
+
+
 def _windows_matching_edit_name(
     windows: list[dict[str, Any]], edit_name: str
 ) -> list[dict[str, Any]]:
@@ -1810,13 +1878,36 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
         self._pending_add_name: str = ""
         self._pending_add_cost: float = 0.0
         self._pending_add_ranges: list[dict[str, str]] = []
+        self._source_entity_to_edit: str | None = None
 
     def _get_current_source(self) -> dict[str, Any]:
         """Get current source from entry."""
         sources = _get_sources_from_entry(self._config_entry)
-        if not sources or not isinstance(sources[0], dict):
+        if not sources:
+            raise ValueError("No source configured")
+        if self._source_entity_to_edit:
+            selected_entity = self._source_entity_to_edit.strip()
+            for source in sources:
+                if not isinstance(source, dict):
+                    continue
+                source_entity = str(source.get(CONF_SOURCE_ENTITY) or "").strip()
+                if source_entity == selected_entity:
+                    return source
+        if not isinstance(sources[0], dict):
             raise ValueError("No source configured")
         return sources[0]
+
+    def _menu_title_from_current_windows(self) -> str:
+        """Build options menu title from the first configured window name."""
+        try:
+            source = self._get_current_source()
+            windows = _normalize_windows_for_schema(source.get(CONF_WINDOWS) or [])
+            names = _unique_window_names(windows)
+            if names:
+                return names[0]
+        except Exception:  # noqa: BLE001
+            pass
+        return self._config_entry.title or "Configure Energy Window Tracker (Beta)"
 
     async def _save_source(
         self,
@@ -1952,13 +2043,14 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.FlowResult:
         """Show Configure Energy Window Tracker (Beta) menu."""
         _MAIN_LOGGER.warning("options flow step init: showing main menu")
+        self._source_entity_to_edit = None
         self._get_current_source()
         menu_options = _build_init_menu_options()
         return self._async_show_menu(
             step_id="init",
             menu_options=menu_options,
             description_placeholders={"windows_list": ""},
-            title="Configure Energy Window Tracker (Beta)",
+            title=self._menu_title_from_current_windows(),
         )
 
     async def _async_step_manage_windows_impl(
@@ -2104,6 +2196,14 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             "options flow step source_entity: user_input=%s",
             "submitted" if user_input is not None else "show form",
         )
+        sources = [
+            source
+            for source in _get_sources_from_entry(self._config_entry)
+            if isinstance(source, dict)
+        ]
+        if len(sources) > 1 and self._source_entity_to_edit is None:
+            return await self.async_step_select_source_entity(None)
+
         src = self._get_current_source()
         source_entity = str(src.get(CONF_SOURCE_ENTITY) or DEFAULT_SOURCE_ENTITY)
         windows = _normalize_windows_for_schema(src.get(CONF_WINDOWS) or [])
@@ -2196,6 +2296,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     "_retain_entity_unique_ids": self._retain_ids_after_save,
                 }
                 del self._retain_ids_after_save
+            self._source_entity_to_edit = new_entity
             return self._async_create_options_entry(options_to_persist)
 
         _MAIN_LOGGER.warning("options flow: showing form step_id=source_entity")
@@ -2204,6 +2305,58 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             data_schema=_build_source_entity_schema(
                 source_entity, current_name, include_remove_previous=True
             ),
+        )
+
+    async def async_step_select_source_entity(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.FlowResult:
+        """Choose which existing source entity to manage."""
+        sources = [
+            source
+            for source in _get_sources_from_entry(self._config_entry)
+            if isinstance(source, dict)
+        ]
+        if not sources:
+            return await self._async_step_manage_impl(None)
+        if len(sources) == 1:
+            only_entity = str(sources[0].get(CONF_SOURCE_ENTITY) or "").strip()
+            self._source_entity_to_edit = only_entity or None
+            return await self.async_step_source_entity(None)
+
+        options: list[dict[str, str]] = []
+        for source in sources:
+            source_entity = str(source.get(CONF_SOURCE_ENTITY) or "").strip()
+            if not source_entity:
+                continue
+            source_name = str(source.get(CONF_NAME) or "").strip()
+            label = f"{source_name} ({source_entity})" if source_name else source_entity
+            options.append({"value": source_entity, "label": label})
+
+        if not options:
+            return await self._async_step_manage_impl(None)
+
+        if user_input is not None:
+            selected = (
+                _normalize_entity_selector_value(user_input.get("source_entity_to_manage"))
+                or str(user_input.get("source_entity_to_manage") or "").strip()
+            )
+            if selected:
+                self._source_entity_to_edit = selected
+            return await self.async_step_source_entity(None)
+
+        default_entity = self._source_entity_to_edit or options[0]["value"]
+        schema = vol.Schema(
+            {
+                vol.Required(
+                    "source_entity_to_manage", default=default_entity
+                ): selector.SelectSelector(
+                    selector.SelectSelectorConfig(options=options, mode="dropdown")
+                )
+            }
+        )
+        return self.async_show_form(
+            step_id="select_source_entity",
+            data_schema=schema,
         )
 
     async def async_step_add_window(
@@ -2322,6 +2475,23 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     step_id="add_window",
                     data_schema=schema,
                     errors={"base": range_error},
+                )
+            if _window_name_already_exists(windows, w_name or ""):
+                ranges_for_form = [{"start": s, "end": e} for s, e in ranges_list]
+                schema = _build_single_window_multi_range_schema(
+                    labels,
+                    None,
+                    w_name or "",
+                    cost,
+                    ranges_for_form,
+                    include_add_another=True,
+                    include_delete=False,
+                    num_slots=num_ranges,
+                )
+                return self.async_show_form(
+                    step_id="add_window",
+                    data_schema=schema,
+                    errors={"base": "duplicate_window_name"},
                 )
             if user_input.get("add_another"):
                 _MAIN_LOGGER.warning(
@@ -2516,6 +2686,30 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     data_schema=schema,
                     errors={"base": range_error},
                 )
+            raw_to_replace = (same_name[0].get(CONF_WINDOW_NAME) or "").strip()
+            if _window_name_already_exists(
+                windows,
+                w_name or "",
+                exclude_raw_name=raw_to_replace,
+            ):
+                ranges_for_form = [{"start": s, "end": e} for s, e in ranges_list]
+                schema = _build_single_window_multi_range_schema(
+                    labels,
+                    None,
+                    w_name or "",
+                    cost_val,
+                    ranges_for_form,
+                    include_add_another=True,
+                    include_delete=False,
+                    include_range_delete=False,
+                    allow_empty_slots=True,
+                    num_slots=num_ranges_for_collect,
+                )
+                return self.async_show_form(
+                    step_id="edit_window",
+                    data_schema=schema,
+                    errors={"base": "duplicate_window_name"},
+                )
             if user_input.get("add_another"):
                 _MAIN_LOGGER.warning(
                     "options: edit_window - add another time range for %r (total %s)",
@@ -2545,7 +2739,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 )
                 return self.async_show_form(step_id="edit_window", data_schema=schema)
             name = (w_name or "").strip() or None
-            raw_to_replace = (same_name[0].get(CONF_WINDOW_NAME) or "").strip()
             new_windows = _replace_window_group_preserve_order(
                 windows, raw_to_replace, name, ranges_list, cost_val
             )
