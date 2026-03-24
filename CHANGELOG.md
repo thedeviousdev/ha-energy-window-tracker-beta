@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.57](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.56...v2.3.57) (2026-03-24)
+
+
+### Bug Fixes
+
+* **flow:** support import/export rates and empty range removal ([#40](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/40)) ([b5a27e9](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/b5a27e9da2311221094bdd9e1b1d61c778c27dfb))
+
 ## [2.3.56](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.55...v2.3.56) (2026-03-24)
 
 
