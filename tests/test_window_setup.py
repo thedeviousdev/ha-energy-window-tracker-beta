@@ -74,10 +74,10 @@ async def test_window_setup_happy_create_entry_and_sensor(hass: HomeAssistant) -
     ]
     assert len(entities) == 1
 
-    # Clicking "Edit" should take the user back to the window_setup form.
-    edit_result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
-    assert edit_result["type"] is data_entry_flow.FlowResultType.FORM
-    assert edit_result["step_id"] == "window_setup"
+    # Clicking "Finish" should return to the configure menu.
+    finish_result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert finish_result["type"] is data_entry_flow.FlowResultType.MENU
+    assert finish_result["step_id"] == "configure_menu"
 
     # Options flow should also load for windows-based entries.
     # Historically this integration only supported the legacy CONF_SOURCES format in options.

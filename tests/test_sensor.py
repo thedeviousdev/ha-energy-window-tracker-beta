@@ -210,3 +210,63 @@ async def test_sensor_setup_happy_legacy_entry_multiple_windows(
         await hass.async_block_till_done()
     entities = _get_tracker_sensors(hass, entry.entry_id)
     assert len(entities) == 2
+
+
+@pytest.mark.asyncio
+async def test_sensor_setup_happy_friendly_name_uses_window_and_source_entity(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Friendly name is '<window> - <source friendly name>'."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Friendly Names",
+        data={
+            CONF_WINDOWS: [
+                {
+                    CONF_WINDOW_NAME: "ZEROHERO",
+                    CONF_COST_PER_KWH: 0.2,
+                    CONF_ENTITIES: ["sensor.today_load", "sensor.today_import"],
+                    CONF_RANGES: [
+                        {CONF_WINDOW_START: "09:00:00", CONF_WINDOW_END: "11:00:00"},
+                        {CONF_WINDOW_START: "17:00:00", CONF_WINDOW_END: "19:00:00"},
+                    ],
+                }
+            ]
+        },
+        options={},
+        entry_id="friendly_name_multi_entity_multi_range",
+    )
+    entry.add_to_hass(hass)
+    hass.states.async_set(
+        "sensor.today_load",
+        "1.0",
+        {"friendly_name": "Today Sensor Load"},
+    )
+    hass.states.async_set(
+        "sensor.today_import",
+        "2.0",
+        {"friendly_name": "Today Sensor Import"},
+    )
+
+    with patch(
+        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+        new_callable=AsyncMock,
+        return_value={},
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    entities = _get_tracker_sensors(hass, entry.entry_id)
+    assert len(entities) == 2
+
+    state_names = {
+        hass.states.get(entity.entity_id).attributes.get("friendly_name")
+        for entity in entities
+        if hass.states.get(entity.entity_id) is not None
+    }
+    assert "ZEROHERO - Today Sensor Load" in state_names
+    assert "ZEROHERO - Today Sensor Import" in state_names
+
+    # unique_id should not be directly mapped to window name text.
+    for entity in entities:
+        assert "zerohero" not in entity.unique_id.lower()

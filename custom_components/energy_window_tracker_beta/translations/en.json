@@ -141,14 +141,15 @@
       },
       "window_entities_confirm": {
         "title": "Window added",
-        "submit": "Edit",
-        "description": "Your window has been added. Click Edit to manage it."
+        "submit": "Finish",
+        "description": "Window successfully created."
       }
     },
     "error": {
       "window_start_after_end": "Start time must be earlier than end time.",
       "at_least_one_window": "At least one window is required (start time before end time).",
       "range_start_before_previous_end": "Each range must start at or after the previous range's end time. Add ranges in chronological order (earliest first).",
+      "duplicate_window_name": "Window name already exists. Use a unique window name.",
       "invalid_time": "Set the window time to be later than all previous windows",
       "source_already_in_use": "Sensor already in use, please edit {entry_title}.",
       "source_entity_required": "Select an energy sensor.",
@@ -189,6 +190,13 @@
         "description": "Changing the source will **permanently delete all historical data** for the current source. The source name will be re-used.",
         "submit": "Continue"
       },
+      "select_source_entity": {
+        "title": "Manage energy source(s)",
+        "data": {
+          "source_entity_to_manage": "Source entity to manage"
+        },
+        "submit": "Next"
+      },
       "source_entity": {
         "title": "Manage energy source(s)",
         "data": {
@@ -199,7 +207,7 @@
       },
       "options_saved": {
         "title": "Success!",
-        "description": "Window(s) successfully updated.",
+        "description": "Window successfully updated.",
         "submit": "Finish"
       },
       "confirm_delete_window": {
@@ -276,6 +284,7 @@
       "window_start_after_end": "Start time must be earlier than end time.",
       "at_least_one_window": "At least one window is required.",
       "range_start_before_previous_end": "Each range must start at or after the previous range's end time. Add ranges in chronological order (earliest first).",
+      "duplicate_window_name": "Window name already exists. Use a unique window name.",
       "invalid_time": "Set the window time to be later than all previous windows",
       "source_entity_required": "Select an energy sensor.",
       "source_already_in_use": "Sensor already in use, please edit {entry_title}.",

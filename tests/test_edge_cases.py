@@ -594,8 +594,8 @@ async def test_unique_ids_stable_when_window_groups_reordered(
     source_entity = "sensor.today_load"
     source_slug = source_slug_from_entity_id(source_entity, "source_0")
 
-    peak_uid = _stable_window_unique_id(entry_id, source_slug, "Peak")
-    off_uid = _stable_window_unique_id(entry_id, source_slug, "Off-Peak")
+    peak_uid = _stable_window_unique_id(entry_id, source_slug, "09:00:00-12:00:00")
+    off_uid = _stable_window_unique_id(entry_id, source_slug, "12:00:00-17:00:00")
 
     entry = _windows_based_entry(
         entry_id=entry_id,
@@ -654,15 +654,16 @@ async def test_unique_ids_stable_when_window_groups_reordered(
 
 
 @pytest.mark.asyncio
-async def test_unique_ids_only_change_for_renamed_window(hass: HomeAssistant) -> None:
-    """[Unhappy] Renaming one window changes only that window's entity/unique_id."""
+async def test_unique_ids_happy_stay_stable_when_window_renamed(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Renaming one window keeps unique_ids when ranges are unchanged."""
     entry_id = "rename_unique_id"
     source_entity = "sensor.today_load"
     source_slug = source_slug_from_entity_id(source_entity, "source_0")
 
-    peak_uid = _stable_window_unique_id(entry_id, source_slug, "Peak")
-    super_peak_uid = _stable_window_unique_id(entry_id, source_slug, "Super Peak")
-    off_uid = _stable_window_unique_id(entry_id, source_slug, "Off-Peak")
+    peak_uid = _stable_window_unique_id(entry_id, source_slug, "09:00:00-12:00:00")
+    off_uid = _stable_window_unique_id(entry_id, source_slug, "12:00:00-17:00:00")
 
     entry = _windows_based_entry(
         entry_id=entry_id,
@@ -720,11 +721,8 @@ async def test_unique_ids_only_change_for_renamed_window(hass: HomeAssistant) ->
         await hass.async_block_till_done()
 
     after = _unique_ids_by_entity_id(hass, entry.entry_id)
-    assert set(after.values()) == {super_peak_uid, off_uid}
+    assert set(after.values()) == {peak_uid, off_uid}
     assert after[off_entity_id] == off_uid, (
         "Off-Peak should keep same unique_id and entity_id"
     )
-    assert peak_uid not in set(after.values()), "old Peak unique_id should be removed"
-    assert super_peak_uid in set(after.values()), (
-        "new Super Peak unique_id should exist"
-    )
+    assert peak_uid in set(after.values())

@@ -105,6 +105,7 @@ async def test_options_flow_happy_opens_from_window_setup_entry(
     )
     assert result["type"] is data_entry_flow.FlowResultType.MENU
     assert result["step_id"] == "init"
+    assert result.get("title") == "Peak"
 
 
 @pytest.mark.asyncio
@@ -181,6 +182,45 @@ async def test_options_source_entity_unhappy_already_in_use_rejected(
 
 
 @pytest.mark.asyncio
+async def test_options_source_entity_happy_multiple_sources_prompts_selection_first(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Multi-source entries show source selection before source editor form."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Energy Window Tracker (Beta)",
+        data={
+            CONF_WINDOWS: [
+                {
+                    CONF_WINDOW_NAME: "Peak",
+                    CONF_COST_PER_KWH: 0.2,
+                    "entities": ["sensor.today_load", "sensor.today_import"],
+                    "ranges": [
+                        {CONF_WINDOW_START: "09:00:00", CONF_WINDOW_END: "11:00:00"}
+                    ],
+                }
+            ]
+        },
+        options={},
+        entry_id="multi_source_manage",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "source_entity"}
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "select_source_entity"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"source_entity_to_manage": "sensor.today_import"}
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "source_entity"
+
+
+@pytest.mark.asyncio
 async def test_options_add_window_happy_path_persists(
     hass: HomeAssistant, mock_legacy_config_entry
 ) -> None:
@@ -220,6 +260,31 @@ async def test_options_add_window_happy_path_persists(
         and w.get(CONF_WINDOW_END) == "07:00:00"
         for w in windows
     )
+
+
+@pytest.mark.asyncio
+async def test_options_add_window_unhappy_duplicate_name_rejected(
+    hass: HomeAssistant, mock_legacy_config_entry
+) -> None:
+    """[Unhappy] Add window rejects duplicate window names."""
+    result = await hass.config_entries.options.async_init(mock_legacy_config_entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "add_window"}
+    )
+    assert result["step_id"] == "add_window"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            CONF_COST_PER_KWH: 0.1,
+            "start_1": "00:00",
+            "end_1": "07:00",
+        },
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "add_window"
+    assert result.get("errors", {}).get("base") == "duplicate_window_name"
 
 
 @pytest.mark.asyncio
@@ -306,6 +371,61 @@ async def test_options_edit_window_happy_preserves_other_sources(
 
 
 @pytest.mark.asyncio
+async def test_options_edit_window_unhappy_rename_to_existing_name_rejected(
+    hass: HomeAssistant,
+) -> None:
+    """[Unhappy] Renaming a window to an existing window name is rejected."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Energy Window Tracker (Beta)",
+        data={
+            CONF_SOURCES: [
+                {
+                    CONF_SOURCE_ENTITY: "sensor.today_load",
+                    CONF_NAME: "Load",
+                    CONF_WINDOWS: [
+                        {
+                            CONF_WINDOW_NAME: "Peak",
+                            CONF_WINDOW_START: "09:00",
+                            CONF_WINDOW_END: "11:00",
+                            CONF_COST_PER_KWH: 0.2,
+                        },
+                        {
+                            CONF_WINDOW_NAME: "Off-Peak",
+                            CONF_WINDOW_START: "12:00",
+                            CONF_WINDOW_END: "14:00",
+                            CONF_COST_PER_KWH: 0.1,
+                        },
+                    ],
+                }
+            ]
+        },
+        options={},
+        entry_id="legacy_duplicate_rename",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "list_windows"}
+    )
+    assert result["step_id"] == "edit_window"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Off-Peak",
+            CONF_COST_PER_KWH: 0.2,
+            "start_1": "09:00",
+            "end_1": "11:00",
+        },
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "edit_window"
+    assert result.get("errors", {}).get("base") == "duplicate_window_name"
+
+
+@pytest.mark.asyncio
 async def test_options_source_entity_happy_update_preserves_other_sources(
     hass: HomeAssistant,
 ) -> None:
@@ -351,6 +471,10 @@ async def test_options_source_entity_happy_update_preserves_other_sources(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "source_entity"}
     )
+    assert result["step_id"] == "select_source_entity"
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"source_entity_to_manage": "sensor.today_load"}
+    )
     assert result["step_id"] == "source_entity"
 
     result = await hass.config_entries.options.async_configure(
@@ -378,6 +502,61 @@ async def test_options_source_entity_happy_update_preserves_other_sources(
     }
     assert "sensor.today_export" in entities
     assert "sensor.today_import" in entities
+
+
+@pytest.mark.asyncio
+async def test_options_edit_window_happy_windows_based_preserves_all_entities(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Editing a windows-based entry does not drop sibling source entities."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Peak",
+        data={
+            CONF_WINDOWS: [
+                {
+                    CONF_WINDOW_NAME: "Peak",
+                    CONF_COST_PER_KWH: 0.2,
+                    "entities": ["sensor.today_load", "sensor.today_import"],
+                    "ranges": [
+                        {CONF_WINDOW_START: "09:00:00", CONF_WINDOW_END: "11:00:00"}
+                    ],
+                }
+            ]
+        },
+        options={},
+        entry_id="windows_based_multi_entity_edit",
+    )
+    entry.add_to_hass(hass)
+
+    result = await hass.config_entries.options.async_init(entry.entry_id)
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "list_windows"}
+    )
+    assert result["step_id"] == "edit_window"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "Peak",
+            CONF_COST_PER_KWH: 0.25,
+            "start_1": "09:00:00",
+            "end_1": "12:00:00",
+        },
+    )
+    assert result["step_id"] == "options_saved"
+
+    saved_entry = hass.config_entries.async_get_entry(entry.entry_id)
+    assert saved_entry is not None
+    sources = (
+        saved_entry.options.get(CONF_SOURCES) or saved_entry.data.get(CONF_SOURCES) or []
+    )
+    entities = {
+        src.get(CONF_SOURCE_ENTITY)
+        for src in sources
+        if isinstance(src, dict) and src.get(CONF_SOURCE_ENTITY)
+    }
+    assert entities == {"sensor.today_load", "sensor.today_import"}
 
 
 @pytest.mark.asyncio
@@ -660,10 +839,10 @@ async def test_options_edit_window_happy_renaming_updates_entry_title(
 
 
 @pytest.mark.asyncio
-async def test_options_add_window_happy_duplicate_name_allowed(
+async def test_options_add_window_unhappy_duplicate_name_rejected_legacy_case(
     hass: HomeAssistant, mock_legacy_config_entry
 ) -> None:
-    """[Happy] Adding another window with the same name is allowed."""
+    """[Unhappy] Adding another window with the same name is rejected."""
     result = await hass.config_entries.options.async_init(
         mock_legacy_config_entry.entry_id
     )
@@ -682,7 +861,8 @@ async def test_options_add_window_happy_duplicate_name_allowed(
         },
     )
     assert result["type"] is data_entry_flow.FlowResultType.FORM
-    assert result["step_id"] == "options_saved"
+    assert result["step_id"] == "add_window"
+    assert result.get("errors", {}).get("base") == "duplicate_window_name"
 
     saved_entry = hass.config_entries.async_get_entry(mock_legacy_config_entry.entry_id)
     assert saved_entry is not None
@@ -694,7 +874,7 @@ async def test_options_add_window_happy_duplicate_name_allowed(
     assert len(sources) == 1
     windows = sources[0][CONF_WINDOWS]
     peak_rows = [w for w in windows if w.get(CONF_WINDOW_NAME) == "Peak"]
-    assert len(peak_rows) >= 2
+    assert len(peak_rows) == 1
 
 
 @pytest.mark.asyncio
