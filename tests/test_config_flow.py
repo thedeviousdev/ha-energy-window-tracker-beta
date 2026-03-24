@@ -167,12 +167,10 @@ async def test_options_source_entity_unhappy_empty_entities_rejected(
 
 
 @pytest.mark.asyncio
-async def test_options_source_entity_unhappy_already_in_use_rejected(
+async def test_options_source_entity_happy_allows_entity_used_by_other_entry(
     hass: HomeAssistant, mock_legacy_config_entry
 ) -> None:
-    """[Unhappy] Source manager rejects entities not in selectable source list."""
-    from homeassistant.data_entry_flow import InvalidData
-
+    """[Happy] Source manager allows entity even when used by another entry."""
     other = MockConfigEntry(
         domain=DOMAIN,
         title="Other",
@@ -195,6 +193,7 @@ async def test_options_source_entity_unhappy_already_in_use_rejected(
         entry_id="other_entry",
     )
     other.add_to_hass(hass)
+    hass.states.async_set("sensor.today_import", "1.0")
 
     result = await hass.config_entries.options.async_init(
         mock_legacy_config_entry.entry_id
@@ -202,13 +201,38 @@ async def test_options_source_entity_unhappy_already_in_use_rejected(
     result = await hass.config_entries.options.async_configure(
         result["flow_id"], {"next_step_id": "source_entity"}
     )
-    with pytest.raises(InvalidData):
-        await hass.config_entries.options.async_configure(
-            result["flow_id"],
-            {
-                CONF_ENTITIES: ["sensor.today_import"],
-            },
-        )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_ENTITIES: ["sensor.today_import"],
+        },
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "options_saved"
+
+
+@pytest.mark.asyncio
+async def test_options_source_entity_happy_allows_new_entity_outside_initial_set(
+    hass: HomeAssistant, mock_legacy_config_entry
+) -> None:
+    """[Happy] Source manager allows adding a new sensor not in initial source list."""
+    hass.states.async_set("sensor.today_import", "1.0")
+    result = await hass.config_entries.options.async_init(
+        mock_legacy_config_entry.entry_id
+    )
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"], {"next_step_id": "source_entity"}
+    )
+    assert result["step_id"] == "source_entity"
+
+    result = await hass.config_entries.options.async_configure(
+        result["flow_id"],
+        {
+            CONF_ENTITIES: ["sensor.today_load", "sensor.today_import"],
+        },
+    )
+    assert result["type"] is data_entry_flow.FlowResultType.FORM
+    assert result["step_id"] == "options_saved"
 
 
 @pytest.mark.asyncio
