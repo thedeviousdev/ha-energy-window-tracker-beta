@@ -7,10 +7,12 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.core import HomeAssistant
+from homeassistant.util import dt as dt_util
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.energy_window_tracker_beta.const import (
     CONF_ENTITIES,
+    CONF_EXPORT_RATE_PER_KWH,
     CONF_IMPORT_RATE_PER_KWH,
     CONF_RANGES,
     CONF_SOURCE_ENTITY,
@@ -45,6 +47,7 @@ def test_get_sources_from_config_happy_windows_based_conversion() -> None:
             {
                 CONF_WINDOW_NAME: "Peak",
                 CONF_IMPORT_RATE_PER_KWH: 0.2,
+                CONF_EXPORT_RATE_PER_KWH: 0.03,
                 CONF_ENTITIES: ["sensor.a", "sensor.b"],
                 CONF_RANGES: [
                     {CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "11:00"},
@@ -61,6 +64,10 @@ def test_get_sources_from_config_happy_windows_based_conversion() -> None:
         assert row[CONF_WINDOWS][0][CONF_WINDOW_NAME] == "Peak"
         assert row[CONF_WINDOWS][0][CONF_WINDOW_START] == "09:00:00"
         assert row[CONF_WINDOWS][0][CONF_WINDOW_END] == "11:00:00"
+        assert row[CONF_WINDOWS][0][CONF_IMPORT_RATE_PER_KWH] == 0.2
+        assert row[CONF_WINDOWS][0][CONF_EXPORT_RATE_PER_KWH] == 0.03
+    windows, _ = _parse_windows(out[0])
+    assert windows[0].export_rate_per_kwh == 0.03
 
 
 def test_get_sources_from_config_unhappy_invalid_ranges_filtered() -> None:
@@ -79,6 +86,69 @@ def test_get_sources_from_config_unhappy_invalid_ranges_filtered() -> None:
     }
     out = _get_sources_from_config(config)
     assert out == []
+
+
+@pytest.mark.asyncio
+async def test_sensor_attributes_import_cost_and_export_credit(
+    hass: HomeAssistant,
+) -> None:
+    """import_cost and export_credit are exposed for window energy."""
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="CostAttrs",
+        data={
+            CONF_WINDOWS: [
+                {
+                    CONF_WINDOW_NAME: "Peak",
+                    CONF_IMPORT_RATE_PER_KWH: 0.2,
+                    CONF_EXPORT_RATE_PER_KWH: 0.03,
+                    CONF_ENTITIES: ["sensor.today_load"],
+                    CONF_RANGES: [
+                        {
+                            CONF_WINDOW_START: "09:00",
+                            CONF_WINDOW_END: "11:00",
+                        }
+                    ],
+                }
+            ]
+        },
+        options={},
+        entry_id="cost_attrs_entry",
+    )
+    entry.add_to_hass(hass)
+    hass.states.async_set("sensor.today_load", "100")
+
+    tz = dt_util.get_time_zone(hass.config.time_zone or "UTC") or dt_util.UTC
+    noon_today = dt_util.now(tz).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
+    today_iso = noon_today.date().isoformat()
+    stored = {
+        "snapshot_date": today_iso,
+        "windows": {"0": {"snapshot_start": 5.0, "snapshot_end": 15.0}},
+    }
+
+    with patch(
+        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+        new_callable=AsyncMock,
+        return_value=stored,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    for wd in entry_data.values():
+        with patch.object(wd, "_now", return_value=noon_today):
+            wd._notify_update()
+    await hass.async_block_till_done()
+
+    entities = _get_tracker_sensors(hass, entry.entry_id)
+    assert len(entities) == 1
+    state = hass.states.get(entities[0].entity_id)
+    assert state is not None
+    assert state.attributes.get("import_cost") == 2.0
+    assert state.attributes.get("export_credit") == 0.3
+    assert state.attributes.get("export_rate_per_kwh") == 0.03
 
 
 def test_parse_windows_unhappy_invalid_time_uses_fallback_and_warning() -> None:

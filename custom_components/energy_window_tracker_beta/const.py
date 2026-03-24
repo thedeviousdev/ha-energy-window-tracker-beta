@@ -42,4 +42,5 @@ def source_slug_from_entity_id(entity_id: str, fallback: str = "source_0") -> st
 
 ATTR_SOURCE_ENTITY = "source_entity"
 ATTR_STATUS = "status"
-ATTR_COST = "cost"
+ATTR_IMPORT_COST = "import_cost"
+ATTR_EXPORT_CREDIT = "export_credit"
