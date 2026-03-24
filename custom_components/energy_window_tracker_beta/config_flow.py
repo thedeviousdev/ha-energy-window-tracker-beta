@@ -1442,11 +1442,14 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         same_name = _windows_matching_edit_name(windows, edit_name)
         if not same_name:
             return await self.async_step_configure_menu(None)
-        num_ranges = len(same_name)
+        unique_ranges = _unique_ranges_for_window_group(same_name)
+        num_ranges = len(unique_ranges) or len(same_name)
         labels = await _get_window_form_labels(
             self.hass, "config", "edit_window", num_ranges=num_ranges
         )
         ranges_data = [
+            {"start": start, "end": end} for start, end in unique_ranges
+        ] or [
             {
                 "start": _time_to_str(w.get(CONF_WINDOW_START) or ""),
                 "end": _time_to_str(w.get(CONF_WINDOW_END) or ""),
@@ -2002,6 +2005,25 @@ def _windows_matching_edit_name(
     return []
 
 
+def _unique_ranges_for_window_group(
+    windows: list[dict[str, Any]],
+) -> list[tuple[str, str]]:
+    """Return unique (start, end) pairs preserving first-seen order."""
+    seen: set[tuple[str, str]] = set()
+    ordered: list[tuple[str, str]] = []
+    for window in windows:
+        start = _time_to_str(window.get(CONF_WINDOW_START) or "")
+        end = _time_to_str(window.get(CONF_WINDOW_END) or "")
+        if not start or not end:
+            continue
+        key = (start, end)
+        if key in seen:
+            continue
+        seen.add(key)
+        ordered.append(key)
+    return ordered
+
+
 def _replace_window_group_preserve_order(
     windows: list[dict[str, Any]],
     raw_to_replace: str,
@@ -2192,14 +2214,11 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
     def _menu_title_from_current_windows(self) -> str:
         """Build options menu title from the first configured window name."""
         try:
-            sources = _get_sources_from_entry(self._config_entry)
-            for source in sources:
-                if not isinstance(source, dict):
-                    continue
-                windows = _normalize_windows_for_schema(source.get(CONF_WINDOWS) or [])
-                names = _unique_window_names(windows)
-                if names:
-                    return _configure_title(names[0])
+            current = {**self._config_entry.data, **(self._config_entry.options or {})}
+            windows = _normalize_windows_for_schema(current.get(CONF_WINDOWS) or [])
+            names = _unique_window_names(windows)
+            if names:
+                return _configure_title(names[0])
         except Exception:  # noqa: BLE001
             pass
         return _configure_title(self._config_entry.title)
@@ -3006,13 +3025,32 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 )
                 return _show_edit_form(schema)
             name = (w_name or "").strip() or None
-            new_windows = _replace_window_group_preserve_order(
-                windows, raw_to_replace, name, ranges_list, cost_val
-            )
-            current_name = src.get(CONF_NAME) or None
-            options_to_persist = await self._save_source(
-                source_entity, new_windows, source_name=current_name
-            )
+            new_sources: list[dict[str, Any]] = []
+            for source in all_sources:
+                if not isinstance(source, dict):
+                    continue
+                src_entity = str(source.get(CONF_SOURCE_ENTITY) or "").strip()
+                src_name = source.get(CONF_NAME)
+                src_windows = _normalize_windows_for_schema(source.get(CONF_WINDOWS) or [])
+                has_target_window = any(
+                    (window.get(CONF_WINDOW_NAME) or "").strip() == raw_to_replace
+                    for window in src_windows
+                )
+                if has_target_window:
+                    src_windows = _replace_window_group_preserve_order(
+                        src_windows, raw_to_replace, name, ranges_list, cost_val
+                    )
+                new_sources.append(
+                    {
+                        CONF_NAME: src_name,
+                        CONF_SOURCE_ENTITY: src_entity,
+                        CONF_WINDOWS: src_windows,
+                    }
+                )
+            options_to_persist = {
+                **(self._config_entry.options or {}),
+                CONF_WINDOWS: _sources_to_windows(new_sources),
+            }
             self._pending_add_ranges = []
             self._pending_add_name = ""
             self._pending_add_cost = 0.0
