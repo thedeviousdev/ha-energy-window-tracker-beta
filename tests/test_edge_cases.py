@@ -6,6 +6,7 @@ snapshot staleness handling, and entity unique_id stability.
 
 from __future__ import annotations
 
+import inspect
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
@@ -400,6 +401,48 @@ async def test_window_setup_happy_schema_serializes_with_allow_empty_slots(
     names = {field["name"] for field in serialized}
     assert "start_1" in names and "end_1" in names
     assert "start_2" in names and "end_2" in names
+
+
+@pytest.mark.asyncio
+async def test_build_runtime_config_entry_happy_supports_new_ha_constructor_kwargs() -> None:
+    """[Happy] Runtime ConfigEntry builder passes new HA kwargs when available."""
+    from custom_components.energy_window_tracker_beta import config_flow
+
+    captured: dict[str, object] = {}
+
+    class DummyEntry:
+        def __init__(self, **kwargs):
+            captured.update(kwargs)
+            self.entry_id = str(kwargs.get("entry_id"))
+
+    fake_sig = inspect.Signature(
+        parameters=[
+            inspect.Parameter("version", inspect.Parameter.KEYWORD_ONLY),
+            inspect.Parameter("minor_version", inspect.Parameter.KEYWORD_ONLY),
+            inspect.Parameter("domain", inspect.Parameter.KEYWORD_ONLY),
+            inspect.Parameter("title", inspect.Parameter.KEYWORD_ONLY),
+            inspect.Parameter("data", inspect.Parameter.KEYWORD_ONLY),
+            inspect.Parameter("source", inspect.Parameter.KEYWORD_ONLY),
+            inspect.Parameter("options", inspect.Parameter.KEYWORD_ONLY),
+            inspect.Parameter("entry_id", inspect.Parameter.KEYWORD_ONLY),
+            inspect.Parameter("unique_id", inspect.Parameter.KEYWORD_ONLY),
+            inspect.Parameter("discovery_keys", inspect.Parameter.KEYWORD_ONLY),
+            inspect.Parameter("subentries_data", inspect.Parameter.KEYWORD_ONLY),
+        ]
+    )
+
+    with (
+        patch.object(config_flow.inspect, "signature", return_value=fake_sig),
+        patch.object(config_flow.config_entries, "ConfigEntry", DummyEntry),
+    ):
+        entry = config_flow._build_runtime_config_entry(
+            title="Peak", windows_data=[{CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "10:00"}]
+        )
+
+    assert entry is not None
+    assert captured["unique_id"] is None
+    assert captured["discovery_keys"] == {}
+    assert captured["subentries_data"] == []
 
 
 @pytest.mark.asyncio
