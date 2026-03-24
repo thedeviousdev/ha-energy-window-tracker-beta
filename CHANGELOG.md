@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.48](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.47...v2.3.48) (2026-03-24)
+
+
+### Bug Fixes
+
+* **config-flow:** support new ConfigEntry constructor requirements ([#18](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/18)) ([7340707](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/734070713f94d04c18009421b2b5dd36881152dc))
+
 ## [2.3.47](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.46...v2.3.47) (2026-03-24)
 
 
