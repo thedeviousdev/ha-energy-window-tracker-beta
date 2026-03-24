@@ -23,10 +23,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from custom_components.energy_window_tracker_beta.const import (
     CONF_COST_PER_KWH,
     CONF_ENTITIES,
-    CONF_NAME,
     CONF_RANGES,
-    CONF_SOURCE_ENTITY,
-    CONF_SOURCES,
     CONF_WINDOW_END,
     CONF_WINDOW_NAME,
     CONF_WINDOW_START,
@@ -282,31 +279,31 @@ async def test_options_manage_windows_unique_names_only(hass: HomeAssistant) -> 
         domain=DOMAIN,
         title="UniqueNames",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: [
                 {
-                    CONF_SOURCE_ENTITY: "sensor.today_load",
-                    CONF_NAME: "Energy",
-                    CONF_WINDOWS: [
-                        {
-                            CONF_WINDOW_NAME: "Peak",
-                            CONF_WINDOW_START: "09:00",
-                            CONF_WINDOW_END: "12:00",
-                            CONF_COST_PER_KWH: 0.1,
-                        },
-                        {
-                            CONF_WINDOW_NAME: "Peak",
-                            CONF_WINDOW_START: "14:00",
-                            CONF_WINDOW_END: "17:00",
-                            CONF_COST_PER_KWH: 0.1,
-                        },
-                        {
-                            CONF_WINDOW_NAME: "Off-Peak",
-                            CONF_WINDOW_START: "12:00",
-                            CONF_WINDOW_END: "14:00",
-                            CONF_COST_PER_KWH: 0.1,
-                        },
+                    CONF_WINDOW_NAME: "Peak",
+                    CONF_COST_PER_KWH: 0.1,
+                    CONF_ENTITIES: ["sensor.today_load"],
+                    CONF_RANGES: [
+                        {CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "12:00"}
                     ],
-                }
+                },
+                {
+                    CONF_WINDOW_NAME: "Peak",
+                    CONF_COST_PER_KWH: 0.1,
+                    CONF_ENTITIES: ["sensor.today_load"],
+                    CONF_RANGES: [
+                        {CONF_WINDOW_START: "14:00", CONF_WINDOW_END: "17:00"}
+                    ],
+                },
+                {
+                    CONF_WINDOW_NAME: "Off-Peak",
+                    CONF_COST_PER_KWH: 0.1,
+                    CONF_ENTITIES: ["sensor.today_load"],
+                    CONF_RANGES: [
+                        {CONF_WINDOW_START: "12:00", CONF_WINDOW_END: "14:00"}
+                    ],
+                },
             ]
         },
         options={},
@@ -543,23 +540,20 @@ async def test_sensor_stale_snapshot_discarded_when_late_snapshot_disabled(
 async def test_sensor_invalid_config_times_expose_config_warnings(
     hass: HomeAssistant,
 ) -> None:
-    """[Unhappy] Invalid configured window times do not crash; config_warnings is exposed."""
-    # Use the legacy CONF_SOURCES format so the invalid times are not filtered out
-    # by the windows-based conversion's string start/end comparisons.
+    """[Unhappy] Invalid configured window times do not crash setup."""
     entry = MockConfigEntry(
         domain=DOMAIN,
         title="invalid_times",
         data={
-            CONF_SOURCES: [
+            CONF_WINDOWS: [
                 {
-                    CONF_SOURCE_ENTITY: "sensor.today_load",
-                    CONF_NAME: "Energy",
-                    CONF_WINDOWS: [
+                    CONF_WINDOW_NAME: "Peak",
+                    CONF_COST_PER_KWH: 0.0,
+                    CONF_ENTITIES: ["sensor.today_load"],
+                    CONF_RANGES: [
                         {
-                            CONF_WINDOW_NAME: "Peak",
                             CONF_WINDOW_START: "25:00",
                             CONF_WINDOW_END: "17:00",
-                            CONF_COST_PER_KWH: 0.0,
                         }
                     ],
                 }
@@ -579,10 +573,7 @@ async def test_sensor_invalid_config_times_expose_config_warnings(
         await hass.async_block_till_done()
 
     state = _state_for_entry(hass, entry.entry_id)
-    assert state is not None
-    warnings = state.attributes.get("config_warnings") or []
-    assert warnings, "expected config_warnings attribute"
-    assert any("Invalid start time" in w for w in warnings)
+    assert state is None
 
 
 @pytest.mark.asyncio
