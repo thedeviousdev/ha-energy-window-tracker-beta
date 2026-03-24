@@ -11,9 +11,11 @@ from pathlib import Path
 from unittest.mock import AsyncMock, patch
 
 import pytest
+import voluptuous_serialize
 from homeassistant import config_entries, data_entry_flow
 from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import entity_registry as er
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
@@ -370,6 +372,34 @@ async def test_window_form_labels_built_from_start_time_end_time_window_setup(
     assert labels["end_2"] == "End time #2"
     assert labels["start_3"] == "Start time #3"
     assert labels["end_3"] == "End time #3"
+
+
+@pytest.mark.asyncio
+async def test_window_setup_happy_schema_serializes_with_allow_empty_slots(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] window_setup schema remains JSON-serializable for HA API responses."""
+    from custom_components.energy_window_tracker_beta.config_flow import (
+        _build_single_window_multi_range_schema,
+        _get_window_form_labels,
+    )
+
+    labels = await _get_window_form_labels(hass, "config", "window_setup", num_ranges=2)
+    schema = _build_single_window_multi_range_schema(
+        labels=labels,
+        default_source_name=None,
+        window_name="Peak",
+        cost_per_kwh=0.2,
+        ranges=[{CONF_WINDOW_START: "09:00:00", CONF_WINDOW_END: "10:00:00"}],
+        include_add_another=True,
+        num_slots=2,
+        allow_empty_slots=True,
+    )
+
+    serialized = voluptuous_serialize.convert(schema, custom_serializer=cv.custom_serializer)
+    names = {field["name"] for field in serialized}
+    assert "start_1" in names and "end_1" in names
+    assert "start_2" in names and "end_2" in names
 
 
 @pytest.mark.asyncio
