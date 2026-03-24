@@ -281,6 +281,33 @@ def _normalize_windows_for_schema(raw: Any) -> list[dict[str, Any]]:
     return out
 
 
+def _flatten_runtime_windows_for_edit(raw_windows: Any) -> list[dict[str, Any]]:
+    """Flatten windows-based rows (`entities` + `ranges`) into edit-form rows."""
+    out: list[dict[str, Any]] = []
+    if not isinstance(raw_windows, list):
+        return out
+    for item in raw_windows:
+        if not isinstance(item, dict):
+            continue
+        cost = _parse_cost(item.get(CONF_COST_PER_KWH))
+        name = str(item.get(CONF_WINDOW_NAME) or "")[:200]
+        ranges = item.get(CONF_RANGES) or []
+        if not isinstance(ranges, list):
+            continue
+        for range_row in ranges:
+            if not isinstance(range_row, dict):
+                continue
+            out.append(
+                {
+                    CONF_WINDOW_NAME: name,
+                    CONF_WINDOW_START: _time_to_str(range_row.get(CONF_WINDOW_START)),
+                    CONF_WINDOW_END: _time_to_str(range_row.get(CONF_WINDOW_END)),
+                    CONF_COST_PER_KWH: cost,
+                }
+            )
+    return out
+
+
 def _build_step_user_schema() -> vol.Schema:
     """Build step 1 schema: legacy-only fallback (not shown in normal flow)."""
     return vol.Schema(
@@ -588,7 +615,9 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             existing_entry = self._get_runtime_setup_entry()
             if existing_entry is None:
                 return []
-            return _normalize_windows_for_schema(existing_entry.data.get(CONF_WINDOWS) or [])
+            return _flatten_runtime_windows_for_edit(
+                existing_entry.data.get(CONF_WINDOWS) or []
+            )
         source = self._get_pending_source()
         return _normalize_windows_for_schema(source.get(CONF_WINDOWS) or [])
 
@@ -1505,7 +1534,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _parse_cost(user_input.get(CONF_COST_PER_KWH)),
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=True,
+                    include_delete=False,
                     num_slots=num_ranges,
                 )
                 return _show_edit_form(schema, time_errors)
@@ -1526,7 +1555,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         for i in range(num_ranges)
                     ],
                     include_add_another=True,
-                    include_delete=True,
+                    include_delete=False,
                     num_slots=num_ranges,
                 )
                 return _show_edit_form(schema, {"base": "window_name_required"})
@@ -1576,7 +1605,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     cost_val,
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=True,
+                    include_delete=False,
                     num_slots=num_ranges,
                 )
                 return _show_edit_form(schema, {"base": range_error})
@@ -1599,7 +1628,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     cost_val,
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=True,
+                    include_delete=False,
                     num_slots=num_ranges,
                 )
                 return _show_edit_form(schema, {"base": "duplicate_window_name"})
@@ -1625,7 +1654,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._pending_add_cost,
                     self._pending_add_ranges,
                     include_add_another=True,
-                    include_delete=True,
+                    include_delete=False,
                     num_slots=num_ranges,
                 )
                 return _show_edit_form(schema)
@@ -1651,7 +1680,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             cost,
             ranges_data,
             include_add_another=True,
-            include_delete=True,
+            include_delete=False,
             num_slots=num_ranges,
         )
         return _show_edit_form(schema)

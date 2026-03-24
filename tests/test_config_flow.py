@@ -1487,3 +1487,57 @@ async def test_config_list_windows_happy_loads_after_window_setup_finish(
     assert "end_1" in schema_fields
     assert "start_2" not in schema_fields
     assert "end_2" not in schema_fields
+
+
+@pytest.mark.asyncio
+async def test_config_edit_window_happy_immediate_multi_range_shows_all_ranges(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] Immediate edit after create shows all configured ranges."""
+    hass.states.async_set("sensor.today_load", "1.0")
+    hass.states.async_set("sensor.today_import", "2.0")
+
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": config_entries.SOURCE_USER}
+    )
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "ZEROCHARGE",
+            "cost_per_kwh": 0.0,
+            "start_1": "00:00:00",
+            "end_1": "11:00:00",
+            "add_another": True,
+        },
+    )
+    assert result["step_id"] == "window_setup"
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"],
+        {
+            "window_name": "ZEROCHARGE",
+            "cost_per_kwh": 0.0,
+            "start_1": "00:00:00",
+            "end_1": "11:00:00",
+            "start_2": "14:00:00",
+            "end_2": "16:00:00",
+        },
+    )
+    assert result["step_id"] == "window_entities"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"entities": ["sensor.today_load", "sensor.today_import"]}
+    )
+    assert result["step_id"] == "window_entities_confirm"
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["step_id"] == "configure_menu"
+
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"next_step_id": "list_windows"}
+    )
+    assert result["step_id"] == "edit_window"
+
+    schema = result["data_schema"]
+    schema_fields = {str(field.schema) for field in schema.schema}
+    assert "start_1" in schema_fields and "end_1" in schema_fields
+    assert "start_2" in schema_fields and "end_2" in schema_fields
