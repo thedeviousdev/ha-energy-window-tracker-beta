@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.59](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.58...v2.3.59) (2026-03-24)
+
+
+### Bug Fixes
+
+* **flow:** clear time slots remove ranges (no Optional defaults) ([#45](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/45)) ([a9ae704](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/a9ae704849e8add64285aa07e8c26a97726ce5ee))
+
 ## [2.3.58](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.57...v2.3.58) (2026-03-24)
 
 
