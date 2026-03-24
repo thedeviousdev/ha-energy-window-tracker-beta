@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.60](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.59...v2.3.60) (2026-03-24)
+
+
+### Features
+
+* **sensor:** import_cost, export_credit; fix export_rate in config flatten ([#47](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/47)) ([490b272](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/490b2728c40dd0ecb9ef5ad4fb077332b9672e3d))
+
 ## [2.3.59](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.58...v2.3.59) (2026-03-24)
 
 
