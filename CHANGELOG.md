@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.51](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.50...v2.3.51) (2026-03-24)
+
+
+### Bug Fixes
+
+* **branding:** move logo assets into brand folder ([#26](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/26)) ([f67856f](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/f67856faf159109f2b45568f4878ea9875bbdf71))
+
 ## [2.3.50](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.49...v2.3.50) (2026-03-24)
 
 
