@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -32,16 +33,19 @@ from .const import (
     ATTR_SOURCE_ENTITY,
     ATTR_STATUS,
     CONF_ENTITIES,
+    CONF_ENTITY_ID,
     CONF_EXPORT_RATE_PER_KWH,
     CONF_IMPORT_RATE_PER_KWH,
     CONF_NAME,
     CONF_RANGES,
     CONF_SOURCE_ENTITY,
+    CONF_SOURCE_SLOT_ID,
     CONF_WINDOW_END,
     CONF_WINDOW_NAME,
     CONF_WINDOW_START,
     CONF_WINDOWS,
     DOMAIN,
+    REGISTRY_UNIQUE_ID_MIGRATION_DONE_KEY,
     STORAGE_KEY,
     STORAGE_VERSION,
     source_slug_from_entity_id,
@@ -49,10 +53,168 @@ from .const import (
 
 _MAIN_LOGGER = logging.getLogger("custom_components.energy_window_tracker_beta")
 
-def _stable_window_unique_id(entry_id: str, source_slug: str, group_key: str) -> str:
-    """Stable unique_id for a window sensor, independent of window name."""
+# Namespace for UUID v5 entity unique_ids (fixed for this integration).
+_ENTITY_UNIQUE_ID_NAMESPACE = uuid.UUID("f47ac10b-58cc-4372-a567-0e02b2c3d479")
+
+
+def source_entity_item(
+    entity_id: str, *, source_slot_id: str | None = None
+) -> dict[str, str]:
+    """Build one `entities[]` entry: stable source_slot_id (new UUID if omitted)."""
+    eid = entity_id.strip()
+    sid = source_slot_id or str(uuid.uuid4())
+    return {CONF_ENTITY_ID: eid, CONF_SOURCE_SLOT_ID: sid}
+
+
+def ensure_source_slot_ids_in_windows(
+    windows: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], bool]:
+    """Normalize entities to {entity_id, source_slot_id}; assign UUIDs where missing."""
+    entity_to_slot: dict[str, str] = {}
+    changed = False
+    new_windows: list[dict[str, Any]] = []
+
+    for w in windows:
+        if not isinstance(w, dict):
+            new_windows.append(w)
+            continue
+        out = dict(w)
+        entities = w.get(CONF_ENTITIES)
+        if not isinstance(entities, list):
+            new_windows.append(out)
+            continue
+        new_entities: list[dict[str, str]] = []
+        for item in entities:
+            if isinstance(item, str):
+                eid = item.strip()
+                if not eid:
+                    continue
+                if eid not in entity_to_slot:
+                    entity_to_slot[eid] = str(uuid.uuid4())
+                    changed = True
+                sid = entity_to_slot[eid]
+                new_entities.append(
+                    {CONF_ENTITY_ID: eid, CONF_SOURCE_SLOT_ID: sid}
+                )
+                changed = True
+            elif isinstance(item, dict):
+                eid = str(
+                    item.get(CONF_ENTITY_ID)
+                    or item.get(CONF_SOURCE_ENTITY)
+                    or ""
+                ).strip()
+                if not eid:
+                    continue
+                sid_raw = item.get(CONF_SOURCE_SLOT_ID)
+                sid = str(sid_raw).strip() if sid_raw is not None else ""
+                if eid not in entity_to_slot:
+                    entity_to_slot[eid] = sid or str(uuid.uuid4())
+                    if not sid:
+                        changed = True
+                else:
+                    canonical = entity_to_slot[eid]
+                    if sid and sid != canonical:
+                        changed = True
+                    sid = canonical
+                spec = {CONF_ENTITY_ID: eid, CONF_SOURCE_SLOT_ID: sid}
+                new_entities.append(spec)
+                if item != spec:
+                    changed = True
+        out[CONF_ENTITIES] = new_entities
+        new_windows.append(out)
+
+    return new_windows, changed
+
+
+def async_update_entry_windows(
+    hass: HomeAssistant, entry: ConfigEntry, windows: list[dict[str, Any]]
+) -> None:
+    """Write CONF_WINDOWS to entry.data or entry.options, matching where it already lives."""
+    if CONF_WINDOWS in entry.data:
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_WINDOWS: windows}
+        )
+    elif entry.options and CONF_WINDOWS in entry.options:
+        hass.config_entries.async_update_entry(
+            entry, options={**entry.options, CONF_WINDOWS: windows}
+        )
+    else:
+        hass.config_entries.async_update_entry(
+            entry, data={**entry.data, CONF_WINDOWS: windows}
+        )
+
+
+def _parse_entity_list_item(item: Any) -> tuple[str, str | None]:
+    """Return (entity_id, source_slot_id or None)."""
+    if isinstance(item, str):
+        eid = item.strip()
+        return (eid, None) if eid else ("", None)
+    if isinstance(item, dict):
+        eid = str(
+            item.get(CONF_ENTITY_ID) or item.get(CONF_SOURCE_ENTITY) or ""
+        ).strip()
+        sid_raw = item.get(CONF_SOURCE_SLOT_ID)
+        if sid_raw is None or sid_raw == "":
+            return (eid, None)
+        sid = str(sid_raw).strip()
+        return (eid, sid or None)
+    return ("", None)
+
+
+def _window_group_key(ranges: list[WindowConfig]) -> str:
+    """Canonical key for a window's time ranges (used for UUID v5 unique_id)."""
+    parts = sorted(
+        f"{r.start_h:02d}:{r.start_m:02d}:{r.start_s:02d}-{r.end_h:02d}:{r.end_m:02d}:{r.end_s:02d}"
+        for r in ranges
+    )
+    return "|".join(parts)
+
+
+def _digest_window_unique_id(entry_id: str, source_index: int, group_key: str) -> str:
+    """Previous stable format (12-char MD5 suffix); used only for registry migration."""
+    digest = hashlib.md5(group_key.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
+    return f"{entry_id}_s{source_index}_window_{digest}"
+
+
+def _index_uuid_window_unique_id(entry_id: str, source_index: int, group_key: str) -> str:
+    """Previous unique_id (UUID v5 with source index); registry migration only."""
+    uid = uuid.uuid5(
+        _ENTITY_UNIQUE_ID_NAMESPACE,
+        f"{entry_id}:{source_index}:{group_key}",
+    )
+    return f"{entry_id}_s{source_index}_{uid}"
+
+
+def _window_sensor_unique_id(
+    entry_id: str, source_slot_id: str, group_key: str
+) -> str:
+    """Stable unique_id from persisted source_slot_id and window range key (order-independent)."""
+    uid = uuid.uuid5(
+        _ENTITY_UNIQUE_ID_NAMESPACE,
+        f"{entry_id}:{source_slot_id}:{group_key}",
+    )
+    return f"{entry_id}_{source_slot_id}_{uid}"
+
+
+def _legacy_slug_window_unique_id(entry_id: str, source_slug: str, group_key: str) -> str:
+    """Oldest unique_id format (included source slug); used only for registry migration."""
     digest = hashlib.md5(group_key.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
     return f"{entry_id}_{source_slug}_window_{digest}"
+
+
+@callback
+def _migrate_legacy_window_unique_ids(
+    hass: HomeAssistant, migrations: list[tuple[str, str]]
+) -> None:
+    """Update entity registry unique_ids from legacy formats to current ids (see migrations)."""
+    registry = er.async_get(hass)
+    for legacy_uid, new_uid in migrations:
+        if legacy_uid == new_uid:
+            continue
+        old_eid = registry.async_get_entity_id("sensor", DOMAIN, legacy_uid)
+        new_eid = registry.async_get_entity_id("sensor", DOMAIN, new_uid)
+        if old_eid and not new_eid:
+            registry.async_update_entity(old_eid, new_unique_id=new_uid)
 
 
 def _source_display_name(hass: HomeAssistant, source_entity: str) -> str:
@@ -198,12 +360,17 @@ class WindowData:
         store: Store,
         tz: datetime.tzinfo | None = None,
         config_warnings_by_name: dict[str, list[str]] | None = None,
+        *,
+        legacy_store_key: str | None = None,
+        legacy_index_store_key: str | None = None,
     ) -> None:
         self.hass = hass
         self._entry_id = entry_id
         self._source_entity = source_entity
         self._windows = windows
         self._store = store
+        self._legacy_store_key: str | None = legacy_store_key
+        self._legacy_index_store_key: str | None = legacy_index_store_key
         self._tz = tz or dt_util.get_default_time_zone()
         self._config_warnings_by_name = config_warnings_by_name or {}
         self._snapshots: dict[int, WindowSnapshots] = {
@@ -325,6 +492,26 @@ class WindowData:
     async def load(self) -> None:
         """Load snapshots from storage. Discard if snapshot_date is not today (e.g. after restart)."""
         stored = await self._store.async_load()
+        if stored is None and self._legacy_index_store_key:
+            legacy_ix = Store(self.hass, STORAGE_VERSION, self._legacy_index_store_key)
+            legacy_ix_data = await legacy_ix.async_load()
+            if legacy_ix_data:
+                stored = legacy_ix_data
+                await self._store.async_save(legacy_ix_data)
+                _MAIN_LOGGER.debug(
+                    "sensor: load - migrated snapshot storage from legacy index key for %s",
+                    self._source_entity,
+                )
+        if stored is None and self._legacy_store_key:
+            legacy = Store(self.hass, STORAGE_VERSION, self._legacy_store_key)
+            legacy_data = await legacy.async_load()
+            if legacy_data:
+                stored = legacy_data
+                await self._store.async_save(legacy_data)
+                _MAIN_LOGGER.debug(
+                    "sensor: load - migrated snapshot storage from legacy slug key for %s",
+                    self._source_entity,
+                )
         today = self._now().date().isoformat()
         if stored:
             self._snapshot_date = stored.get("snapshot_date")
@@ -463,6 +650,7 @@ def _get_sources_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
     windows = config.get(CONF_WINDOWS)
     if isinstance(windows, list) and windows:
         by_entity: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
+        entity_to_slot: dict[str, str] = {}
         for i, w in enumerate(windows):
             if not isinstance(w, dict):
                 continue
@@ -502,10 +690,14 @@ def _get_sources_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
                 )
             if not range_rows:
                 continue
-            for entity_id in entities:
-                if not isinstance(entity_id, str) or not entity_id.strip():
+            for item in entities:
+                eid, maybe_sid = _parse_entity_list_item(item)
+                if not eid:
                     continue
-                eid = entity_id.strip()
+                if eid not in entity_to_slot:
+                    entity_to_slot[eid] = maybe_sid or str(uuid.uuid4())
+                elif maybe_sid and entity_to_slot[eid] != maybe_sid:
+                    pass  # first-seen slot wins
                 by_entity.setdefault(eid, []).extend(range_rows)
 
         out: list[dict[str, Any]] = []
@@ -513,6 +705,7 @@ def _get_sources_from_config(config: dict[str, Any]) -> list[dict[str, Any]]:
             out.append(
                 {
                     CONF_SOURCE_ENTITY: entity_id,
+                    CONF_SOURCE_SLOT_ID: entity_to_slot[entity_id],
                     CONF_NAME: entity_id.split(".", 1)[-1].replace("_", " ").title(),
                     CONF_WINDOWS: entity_windows,
                 }
@@ -530,7 +723,17 @@ async def async_setup_entry(
     _MAIN_LOGGER.debug(
         "sensor: async_setup_entry - entry_id=%s, setting up entities", entry.entry_id
     )
-    config = {**entry.data, **entry.options}
+    merged = {**entry.data, **(entry.options or {})}
+    raw_windows = merged.get(CONF_WINDOWS)
+    if isinstance(raw_windows, list) and raw_windows:
+        windows_norm, slot_changed = ensure_source_slot_ids_in_windows(raw_windows)
+        if slot_changed:
+            async_update_entry_windows(hass, entry, windows_norm)
+            merged = {**entry.data, **(entry.options or {})}
+    registry_migration_done = bool(
+        merged.get(REGISTRY_UNIQUE_ID_MIGRATION_DONE_KEY)
+    )
+    config = merged
     sources = _get_sources_from_config(config)
     if not sources:
         _MAIN_LOGGER.debug("sensor: async_setup_entry - no sources in config")
@@ -540,6 +743,7 @@ async def async_setup_entry(
     entry_data: dict[str, WindowData] = {}
     hass.data[DOMAIN][entry.entry_id] = entry_data
     all_sensors: list[WindowEnergySensor] = []
+    unique_id_migrations: list[tuple[str, str]] = []
 
     for source_index, source_config in enumerate(sources):
         if not isinstance(source_config, dict):
@@ -566,16 +770,26 @@ async def async_setup_entry(
                 else str(source_entity)
             )
         source_name = source_config.get(CONF_NAME) or "Window"
+        source_slot_id = str(source_config.get(CONF_SOURCE_SLOT_ID) or "").strip()
+        if not source_slot_id:
+            _MAIN_LOGGER.warning(
+                "sensor: async_setup_entry - missing source_slot_id for %r, skipping",
+                source_entity,
+            )
+            continue
         windows, warnings_by_name = _parse_windows(source_config)
         if not windows:
             continue
 
         slug = source_slug_from_entity_id(source_entity, f"source_{source_index}")
+        slot_token = source_slot_id.replace("-", "")
         store = Store(
             hass,
             STORAGE_VERSION,
-            f"{STORAGE_KEY}_{entry.entry_id}_{slug}",
+            f"{STORAGE_KEY}_{entry.entry_id}_{slot_token}",
         )
+        legacy_index_store_key = f"{STORAGE_KEY}_{entry.entry_id}_s{source_index}"
+        legacy_store_key = f"{STORAGE_KEY}_{entry.entry_id}_{slug}"
         source_display_name = _source_display_name(hass, source_entity)
         # Use HA configured timezone so window start/end and "today" match the frontend
         tz_str = getattr(hass.config, "time_zone", None) or "UTC"
@@ -590,9 +804,11 @@ async def async_setup_entry(
             store=store,
             tz=tz,
             config_warnings_by_name=warnings_by_name,
+            legacy_store_key=legacy_store_key,
+            legacy_index_store_key=legacy_index_store_key,
         )
         await data.load()
-        entry_data[slug] = data
+        entry_data[slot_token] = data
 
         # Group time ranges by window name: one sensor per name, value = sum over its ranges
         by_name: OrderedDict[str, list[WindowConfig]] = OrderedDict()
@@ -606,11 +822,35 @@ async def async_setup_entry(
                 window_name,
                 len(ranges),
             )
-            group_parts = sorted(
-                f"{r.start_h:02d}:{r.start_m:02d}:{r.start_s:02d}-{r.end_h:02d}:{r.end_m:02d}:{r.end_s:02d}"
-                for r in ranges
+            group_key = _window_group_key(ranges)
+            new_uid = _window_sensor_unique_id(
+                entry.entry_id, source_slot_id, group_key
             )
-            group_key = "|".join(group_parts)
+            if not registry_migration_done:
+                unique_id_migrations.append(
+                    (
+                        _legacy_slug_window_unique_id(
+                            entry.entry_id, slug, group_key
+                        ),
+                        new_uid,
+                    )
+                )
+                unique_id_migrations.append(
+                    (
+                        _digest_window_unique_id(
+                            entry.entry_id, source_index, group_key
+                        ),
+                        new_uid,
+                    )
+                )
+                unique_id_migrations.append(
+                    (
+                        _index_uuid_window_unique_id(
+                            entry.entry_id, source_index, group_key
+                        ),
+                        new_uid,
+                    )
+                )
             sensor = WindowEnergySensor(
                 hass=hass,
                 entry_id=entry.entry_id,
@@ -621,23 +861,26 @@ async def async_setup_entry(
                 data=data,
                 all_windows=windows,
                 is_first=(name_index == 0),
-                source_slug=slug,
-                source_index=source_index,
+                source_slot_id=source_slot_id,
                 name_index=name_index,
                 unique_group_key=group_key,
             )
             all_sensors.append(sensor)
 
+    _migrate_legacy_window_unique_ids(hass, unique_id_migrations)
+
     # Remove entities for windows that no longer exist (or old source after change)
     # unless they are in the retain list (user chose not to remove when changing source).
     retain_ids = set(entry.options.get("_retain_entity_unique_ids") or [])
+    options_out = dict(entry.options or {})
     if retain_ids:
-        new_options = {
-            k: v
-            for k, v in (entry.options or {}).items()
-            if k != "_retain_entity_unique_ids"
-        }
-        hass.config_entries.async_update_entry(entry, options=new_options or None)
+        options_out.pop("_retain_entity_unique_ids", None)
+    if not registry_migration_done:
+        options_out[REGISTRY_UNIQUE_ID_MIGRATION_DONE_KEY] = True
+    if retain_ids or not registry_migration_done:
+        hass.config_entries.async_update_entry(
+            entry, options=options_out or None
+        )
     current_unique_ids = {sensor.unique_id for sensor in all_sensors}
     registry = er.async_get(hass)
     for entity_entry in registry.entities.get_entries_for_config_entry_id(
@@ -696,8 +939,7 @@ class WindowEnergySensor(RestoreSensor):
         all_windows: list[WindowConfig],
         unique_group_key: str,
         is_first: bool = False,
-        source_slug: str | None = None,
-        source_index: int = 0,
+        source_slot_id: str = "",
         name_index: int = 0,
     ) -> None:
         self.hass = hass
@@ -709,12 +951,9 @@ class WindowEnergySensor(RestoreSensor):
         self._all_windows = all_windows
         self._is_first = is_first
         self._attr_name = f"{window_name} - {source_display_name}"
-        if source_slug:
-            self._attr_unique_id = _stable_window_unique_id(
-                entry_id, source_slug, unique_group_key
-            )
-        else:
-            self._attr_unique_id = f"{entry_id}_{name_index}"
+        self._attr_unique_id = _window_sensor_unique_id(
+            entry_id, source_slot_id, unique_group_key
+        )
         self._last_source_value: float | None = None
         self._last_status: str | None = None
 

@@ -8,7 +8,11 @@ from homeassistant.components.sensor import DOMAIN as SENSOR_DOMAIN
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
 
-from custom_components.energy_window_tracker_beta.const import DOMAIN
+from custom_components.energy_window_tracker_beta.const import (
+    CONF_ENTITY_ID,
+    CONF_SOURCE_SLOT_ID,
+    DOMAIN,
+)
 
 
 @pytest.mark.asyncio
@@ -63,7 +67,10 @@ async def test_window_setup_happy_create_entry_and_sensor(hass: HomeAssistant) -
     windows = entry.data.get("windows") or []
     assert len(windows) == 1
     assert windows[0]["name"] == "Peak"
-    assert windows[0]["entities"] == ["sensor.today_load"]
+    ent0 = windows[0]["entities"][0]
+    assert isinstance(ent0, dict)
+    assert ent0[CONF_ENTITY_ID] == "sensor.today_load"
+    assert len(ent0[CONF_SOURCE_SLOT_ID]) >= 32
     assert len(windows[0]["ranges"]) == 2
 
     registry = er.async_get(hass)
@@ -78,6 +85,7 @@ async def test_window_setup_happy_create_entry_and_sensor(hass: HomeAssistant) -
     finish_result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert finish_result["type"] is data_entry_flow.FlowResultType.MENU
     assert finish_result["step_id"] == "configure_menu"
+    assert finish_result.get("description")
     menu_options = finish_result.get("menu_options") or {}
     assert "done" not in menu_options
 
@@ -85,6 +93,7 @@ async def test_window_setup_happy_create_entry_and_sensor(hass: HomeAssistant) -
     options_result = await hass.config_entries.options.async_init(entry_id)
     assert options_result["type"] is data_entry_flow.FlowResultType.MENU
     assert options_result["step_id"] == "init"
+    assert options_result.get("description")
 
 
 @pytest.mark.asyncio
@@ -138,7 +147,10 @@ async def test_window_setup_happy_neutralize_extra_placeholder_range_slot_delete
     windows = entries[0].data.get("windows") or []
     assert len(windows) == 1
     assert windows[0]["name"] == "Peak"
-    assert windows[0]["entities"] == ["sensor.today_load"]
+    ent0 = windows[0]["entities"][0]
+    assert isinstance(ent0, dict)
+    assert ent0[CONF_ENTITY_ID] == "sensor.today_load"
+    assert len(ent0[CONF_SOURCE_SLOT_ID]) >= 32
     assert len(windows[0]["ranges"]) == 1
     assert windows[0]["ranges"][0]["start"] == "09:00:00"
     assert windows[0]["ranges"][0]["end"] == "11:00:00"

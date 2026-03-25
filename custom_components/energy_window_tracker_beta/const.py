@@ -19,6 +19,8 @@ CONF_WINDOW_NAME = "name"
 CONF_IMPORT_RATE_PER_KWH = "import_rate_per_kwh"
 CONF_EXPORT_RATE_PER_KWH = "export_rate_per_kwh"
 CONF_ENTITIES = "entities"
+CONF_ENTITY_ID = "entity_id"
+CONF_SOURCE_SLOT_ID = "source_slot_id"
 CONF_RANGES = "ranges"
 
 DEFAULT_ENTRY_TITLE_KEY = "config.defaults.entry_title"
@@ -30,6 +32,9 @@ DEFAULT_WINDOW_END = "14:00"
 
 STORAGE_VERSION = 1
 STORAGE_KEY = "energy_window_tracker_beta_snapshots"
+
+# Internal: after sensor platform runs once, legacy unique_id registry migration is skipped.
+REGISTRY_UNIQUE_ID_MIGRATION_DONE_KEY = "_registry_unique_id_migration_v3"
 
 
 def source_slug_from_entity_id(entity_id: str, fallback: str = "source_0") -> str:

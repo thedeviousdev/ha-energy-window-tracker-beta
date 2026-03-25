@@ -2,6 +2,9 @@
 
 Where translated strings show
 -----------------------------
+Menu preambles for **Configure window** come from `options.step.init.description` (reconfigure)
+and `config.step.configure_menu.description` (initial setup menu).
+
 Form field labels (e.g. "1 - Start time", "2 - End time") appear in the UI when you:
 - Add an entry: step "Add window" (windows) and "Add new window" (add_window)
 - Configure an entry: "Add new window" and "Edit window" (add_window, edit_window)
@@ -24,7 +27,6 @@ import inspect
 import logging
 import re
 import uuid
-from collections import OrderedDict
 from typing import Any
 
 import voluptuous as vol
@@ -36,11 +38,13 @@ from homeassistant.helpers.translation import async_get_translations
 
 from .const import (
     CONF_ENTITIES,
+    CONF_ENTITY_ID,
     CONF_EXPORT_RATE_PER_KWH,
     CONF_IMPORT_RATE_PER_KWH,
     CONF_NAME,
     CONF_RANGES,
     CONF_SOURCE_ENTITY,
+    CONF_SOURCE_SLOT_ID,
     CONF_WINDOW_END,
     CONF_WINDOW_NAME,
     CONF_WINDOW_START,
@@ -53,6 +57,11 @@ from .const import (
     DEFAULT_WINDOW_START,
     DOMAIN,
     source_slug_from_entity_id,
+)
+from .sensor import (
+    _get_sources_from_config,
+    ensure_source_slot_ids_in_windows,
+    source_entity_item,
 )
 
 _MAIN_LOGGER = logging.getLogger("custom_components.energy_window_tracker_beta")
@@ -69,7 +78,7 @@ def _configure_title(window_name: str | None) -> str:
     name = (window_name or "").strip()
     if name:
         return f"Configure {name}"
-    return "Configure Energy Window Tracker (Beta)"
+    return "Configure window"
 
 
 def _build_runtime_config_entry(
@@ -371,6 +380,22 @@ async def _get_config_defaults(hass: Any) -> dict[str, str]:
     }
 
 
+async def _async_get_category_translation_suffix(
+    hass: Any, category: str, relative_path: str
+) -> str | None:
+    """Load a string whose flattened key ends with '<category>.<relative_path>'."""
+    lang = hass.config.language or "en"
+    try:
+        trans = await async_get_translations(hass, lang, category, [DOMAIN]) or {}
+    except Exception:  # noqa: BLE001
+        return None
+    needle = f"{category}.{relative_path}"
+    for key, val in trans.items():
+        if isinstance(val, str) and key.endswith(needle):
+            return val
+    return None
+
+
 def _data_key(step_id: str, field: str) -> str:
     """Translation key for step data field: step.<step_id>.data.<field>."""
     return f"step.{step_id}.data.{field}"
@@ -398,7 +423,6 @@ async def _get_window_form_labels(
         "import_rate_per_kwh",
         "export_rate_per_kwh",
         "add_another",
-        "delete_this_window",
     ):
         k = _data_key(step_id, key)
         if k in trans:
@@ -419,7 +443,6 @@ def _build_single_window_multi_range_schema(
     import_rate_per_kwh: float,
     ranges: list[dict[str, str]],
     include_add_another: bool,
-    include_delete: bool = False,
     include_range_delete: bool = False,
     num_slots: int | None = None,
     allow_empty_slots: bool = False,
@@ -494,14 +517,6 @@ def _build_single_window_multi_range_schema(
         schema_dict[
             vol.Optional(
                 "add_another", default=False, description=labels.get("add_another")
-            )
-        ] = bool
-    if include_delete:
-        schema_dict[
-            vol.Optional(
-                "delete_this_window",
-                default=False,
-                description=labels.get("delete_this_window"),
             )
         ] = bool
     return vol.Schema(schema_dict)
@@ -761,7 +776,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _parse_cost(user_input.get(CONF_IMPORT_RATE_PER_KWH)),
                     self._setup_ranges,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -800,7 +814,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ranges_for_schema,
                     export_rate_per_kwh=export_rate,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=n_collect,
                     allow_empty_slots=True,
                 )
@@ -825,7 +838,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._setup_ranges,
                     export_rate_per_kwh=self._setup_export_rate,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=n_slots,
                     allow_empty_slots=True,
                 )
@@ -845,7 +857,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._setup_ranges,
             export_rate_per_kwh=self._setup_export_rate,
             include_add_another=True,
-            include_delete=False,
             num_slots=num_ranges,
             allow_empty_slots=True,
         )
@@ -889,7 +900,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         CONF_IMPORT_RATE_PER_KWH: self._setup_cost,
                         CONF_EXPORT_RATE_PER_KWH: self._setup_export_rate,
                         CONF_RANGES: list(self._setup_ranges),
-                        CONF_ENTITIES: [entity_id],
+                        CONF_ENTITIES: [source_entity_item(entity_id)],
                     }
                 )
             # Use the configured window name as the config entry title so
@@ -1030,7 +1041,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _parse_cost(user_input.get(CONF_IMPORT_RATE_PER_KWH)),
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                 )
                 return self.async_show_form(
@@ -1060,7 +1070,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     cost,
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(
@@ -1099,7 +1108,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     cost,
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(
@@ -1131,7 +1139,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     cost,
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(
@@ -1158,7 +1165,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._initial_ranges,
                     export_rate_per_kwh=self._initial_window_export_rate,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                 )
                 return self.async_show_form(
@@ -1197,7 +1203,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                             CONF_WINDOW_NAME: w_name or None,
                             CONF_IMPORT_RATE_PER_KWH: cost,
                             CONF_EXPORT_RATE_PER_KWH: export_rate,
-                            CONF_ENTITIES: [source_entity],
+                            CONF_ENTITIES: [source_entity_item(source_entity)],
                             CONF_RANGES: [
                                 {
                                     CONF_WINDOW_START: s,
@@ -1219,7 +1225,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._initial_ranges,
             export_rate_per_kwh=self._initial_window_export_rate,
             include_add_another=True,
-            include_delete=False,
             num_slots=num_ranges,
         )
         return self.async_show_form(
@@ -1229,7 +1234,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_configure_menu(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Show Configure Energy Window Tracker (Beta) menu (after first window, before Done)."""
+        """Show Configure window menu (after first window, before Done)."""
         _MAIN_LOGGER.debug(
             "config flow step configure_menu: user_input=%s",
             "submitted" if user_input is not None else "show menu",
@@ -1242,17 +1247,20 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             )
             if next_step in ("add_window", "list_windows", "source_entity"):
                 return await getattr(self, f"async_step_{next_step}")(None)
-        return self._async_show_configure_menu()
+        return await self._async_show_configure_menu()
 
-    def _async_show_configure_menu(self) -> config_entries.FlowResult:
-        """Show the Configure Energy Window Tracker (Beta) menu (config flow)."""
+    async def _async_show_configure_menu(self) -> config_entries.FlowResult:
+        """Show the Configure window menu (config flow)."""
         _MAIN_LOGGER.debug("config flow: showing menu step_id=configure_menu")
         menu_title = _configure_title(None)
         if self._setup_windows:
             first_name = str(self._setup_windows[0].get(CONF_WINDOW_NAME) or "").strip()
             if first_name:
                 menu_title = _configure_title(first_name)
-        return {
+        preamble = await _async_get_category_translation_suffix(
+            self.hass, "config", "step.configure_menu.description"
+        )
+        result: config_entries.FlowResult = {
             "type": data_entry_flow.FlowResultType.MENU,
             "flow_id": self.flow_id,
             "handler": self.handler,
@@ -1260,6 +1268,9 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             "menu_options": _build_configure_menu_options(),
             "title": menu_title,
         }
+        if preamble:
+            result["description"] = preamble
+        return result
 
     async def async_step_done(
         self, user_input: dict[str, Any] | None = None
@@ -1317,7 +1328,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     _parse_cost(user_input.get(CONF_IMPORT_RATE_PER_KWH)),
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(
@@ -1354,7 +1364,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     cost,
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(
@@ -1383,7 +1392,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     cost,
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(
@@ -1400,7 +1408,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     cost,
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges_for_collect,
                 )
                 return self.async_show_form(
@@ -1429,7 +1436,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._pending_add_ranges,
                     export_rate_per_kwh=self._pending_add_export_rate,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                 )
                 return self.async_show_form(step_id="add_window", data_schema=schema)
@@ -1460,7 +1466,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             self._pending_add_ranges,
             export_rate_per_kwh=self._pending_add_export_rate,
             include_add_another=True,
-            include_delete=False,
             num_slots=num_ranges,
         )
         return self.async_show_form(step_id="add_window", data_schema=schema)
@@ -1576,20 +1581,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 pass
 
         if user_input is not None:
-            if user_input.get("delete_this_window"):
-                raw_to_remove = (same_name[0].get(CONF_WINDOW_NAME) or "").strip()
-                new_windows = [
-                    w
-                    for w in windows
-                    if (w.get(CONF_WINDOW_NAME) or "").strip() != raw_to_remove
-                ]
-                if self._is_runtime_setup_mode():
-                    await self._delete_runtime_setup_window_group(
-                        target_window_name=raw_to_remove
-                    )
-                else:
-                    await self._set_active_windows_for_configure(new_windows)
-                return await self.async_step_configure_menu(None)
             num_ranges = max(num_ranges, 1)
             time_errors = _validate_time_fields(user_input, num_ranges)
             if time_errors:
@@ -1616,7 +1607,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         user_input.get(CONF_EXPORT_RATE_PER_KWH)
                     ),
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -1643,7 +1633,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ranges_for_form,
                     include_add_another=True,
                     export_rate_per_kwh=export_rate_val,
-                    include_delete=False,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -1673,7 +1662,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ranges_for_form,
                     include_add_another=True,
                     export_rate_per_kwh=export_rate_val,
-                    include_delete=True,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -1704,7 +1692,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ranges_for_form,
                     export_rate_per_kwh=export_rate_val,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -1732,7 +1719,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     ranges_for_form,
                     export_rate_per_kwh=export_rate_val,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -1764,7 +1750,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     self._pending_add_ranges,
                     export_rate_per_kwh=self._pending_add_export_rate,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -1801,7 +1786,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             ranges_data,
             export_rate_per_kwh=export_rate,
             include_add_another=True,
-            include_delete=False,
             num_slots=num_ranges,
             allow_empty_slots=True,
         )
@@ -1851,6 +1835,7 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                     windows = _normalize_windows_for_schema(
                         existing_entry.data.get(CONF_WINDOWS) or []
                     )
+                    windows, _ = ensure_source_slot_ids_in_windows(windows)
                     rewritten_windows: list[dict[str, Any]] = []
                     for window in windows:
                         if not isinstance(window, dict):
@@ -1858,17 +1843,57 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                         entities = window.get(CONF_ENTITIES) or []
                         if not isinstance(entities, list):
                             entities = []
-                        rewritten_entities: list[str] = []
+                        rewritten_entities: list[Any] = []
                         for entity in entities:
-                            entity_text = str(entity or "").strip()
-                            if not entity_text:
-                                continue
-                            if entity_text == source_entity:
-                                rewritten_entities.append(new_entity)
+                            if isinstance(entity, dict):
+                                eid = str(
+                                    entity.get(CONF_ENTITY_ID)
+                                    or entity.get(CONF_SOURCE_ENTITY)
+                                    or ""
+                                ).strip()
+                                sid_raw = entity.get(CONF_SOURCE_SLOT_ID)
+                                sid = (
+                                    str(sid_raw).strip()
+                                    if sid_raw is not None
+                                    else ""
+                                )
+                                if eid == source_entity:
+                                    rewritten_entities.append(
+                                        source_entity_item(
+                                            new_entity,
+                                            source_slot_id=sid or None,
+                                        )
+                                    )
+                                else:
+                                    rewritten_entities.append(dict(entity))
                             else:
-                                rewritten_entities.append(entity_text)
-                        if source_entity in entities and new_entity not in rewritten_entities:
-                            rewritten_entities.append(new_entity)
+                                entity_text = str(entity or "").strip()
+                                if not entity_text:
+                                    continue
+                                if entity_text == source_entity:
+                                    rewritten_entities.append(
+                                        source_entity_item(new_entity)
+                                    )
+                                else:
+                                    rewritten_entities.append(entity_text)
+
+                        def _entity_row_id(it: Any) -> str:
+                            if isinstance(it, str):
+                                return it.strip()
+                            if isinstance(it, dict):
+                                return str(
+                                    it.get(CONF_ENTITY_ID)
+                                    or it.get(CONF_SOURCE_ENTITY)
+                                    or ""
+                                ).strip()
+                            return ""
+
+                        rew_ids = [_entity_row_id(e) for e in rewritten_entities]
+                        if (
+                            source_entity in [_entity_row_id(e) for e in entities]
+                            and new_entity not in rew_ids
+                        ):
+                            rewritten_entities.append(source_entity_item(new_entity))
                         rewritten_window = dict(window)
                         rewritten_window[CONF_ENTITIES] = rewritten_entities
                         rewritten_windows.append(rewritten_window)
@@ -1937,65 +1962,7 @@ def _get_sources_from_entry(entry: config_entries.ConfigEntry) -> list[dict[str,
             entry.entry_id,
         )
         return []
-
-    by_entity: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
-    for i, w in enumerate(windows):
-        if not isinstance(w, dict):
-            continue
-        entities = w.get(CONF_ENTITIES)
-        ranges = w.get(CONF_RANGES)
-        if not isinstance(entities, list) or not isinstance(ranges, list):
-            continue
-        name = (w.get(CONF_WINDOW_NAME) or "").strip() or f"Window {i + 1}"
-        cost = 0.0
-        export_rate = 0.0
-        try:
-            if w.get(CONF_IMPORT_RATE_PER_KWH) is not None:
-                cost = max(0.0, float(w.get(CONF_IMPORT_RATE_PER_KWH)))
-        except (TypeError, ValueError):
-            cost = 0.0
-        try:
-            if w.get(CONF_EXPORT_RATE_PER_KWH) is not None:
-                export_rate = max(0.0, float(w.get(CONF_EXPORT_RATE_PER_KWH)))
-        except (TypeError, ValueError):
-            export_rate = 0.0
-
-        range_rows: list[dict[str, Any]] = []
-        for r in ranges:
-            if not isinstance(r, dict):
-                continue
-            start = _time_to_str(r.get(CONF_WINDOW_START))
-            end = _time_to_str(r.get(CONF_WINDOW_END))
-            if not start or not end or start >= end:
-                continue
-            range_rows.append(
-                {
-                    CONF_WINDOW_NAME: name,
-                    CONF_WINDOW_START: start,
-                    CONF_WINDOW_END: end,
-                    CONF_IMPORT_RATE_PER_KWH: cost,
-                    CONF_EXPORT_RATE_PER_KWH: export_rate,
-                }
-            )
-
-        if not range_rows:
-            continue
-
-        for entity_id in entities:
-            if not isinstance(entity_id, str) or not entity_id.strip():
-                continue
-            eid = entity_id.strip()
-            by_entity.setdefault(eid, []).extend(range_rows)
-
-    out: list[dict[str, Any]] = []
-    for entity_id, entity_windows in by_entity.items():
-        out.append(
-            {
-                CONF_SOURCE_ENTITY: entity_id,
-                CONF_NAME: entity_id.split(".", 1)[-1].replace("_", " ").title(),
-                CONF_WINDOWS: entity_windows,
-            }
-        )
+    out = _get_sources_from_config(current)
     _MAIN_LOGGER.debug(
         "_get_sources_from_entry: entry_id=%s converted %s sources",
         entry.entry_id,
@@ -2013,6 +1980,11 @@ def _sources_to_windows(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
         source_entity = str(source.get(CONF_SOURCE_ENTITY) or "").strip()
         if not source_entity:
             continue
+        source_slot_id = str(source.get(CONF_SOURCE_SLOT_ID) or "").strip()
+        entity_spec = source_entity_item(
+            source_entity,
+            source_slot_id=source_slot_id if source_slot_id else None,
+        )
         source_windows = source.get(CONF_WINDOWS) or []
         if not isinstance(source_windows, list):
             continue
@@ -2030,7 +2002,7 @@ def _sources_to_windows(sources: list[dict[str, Any]]) -> list[dict[str, Any]]:
                     CONF_EXPORT_RATE_PER_KWH: _parse_cost(
                         window.get(CONF_EXPORT_RATE_PER_KWH)
                     ),
-                    CONF_ENTITIES: [source_entity],
+                    CONF_ENTITIES: [entity_spec],
                     CONF_RANGES: [
                         {
                             CONF_WINDOW_START: range_start,
@@ -2068,8 +2040,8 @@ def _entry_using_source_entity(
 def _build_init_menu_options() -> dict[str, str]:
     """Build main menu as step_id -> label (dict so labels show without translation lookup)."""
     return {
-        "list_windows": "✏️ Edit window",
-        "source_entity": "⚡️ Manage energy source(s)",
+        "list_windows": "Edit ✏️",
+        "source_entity": "Update energy source(s) ⚡️",
     }
 
 
@@ -2309,7 +2281,7 @@ def _build_source_entities_manage_schema(
 
 
 class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow: Configure Energy Window Tracker (Beta) — add/edit/delete windows, change source."""
+    """Handle options flow: Configure window — add/edit/delete windows, change source."""
 
     def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
         super().__init__()
@@ -2431,7 +2403,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Configure Energy Window Tracker (Beta): show menu (Add new window, Manage windows, Update energy source)."""
+        """Configure window: show menu (Add new window, Manage windows, Update energy source)."""
         _MAIN_LOGGER.debug(
             "options flow opened (entry_id=%s); enable debug for this integration to see step details",
             self._config_entry.entry_id,
@@ -2482,15 +2454,18 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
     async def _async_step_manage_impl(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.FlowResult:
-        """Show Configure Energy Window Tracker (Beta) menu."""
+        """Show Configure window menu."""
         _MAIN_LOGGER.debug("options flow step init: showing main menu")
         self._source_entity_to_edit = None
         self._get_current_source()
         menu_options = _build_init_menu_options()
+        preamble = await _async_get_category_translation_suffix(
+            self.hass, "options", "step.init.description"
+        )
         return self._async_show_menu(
             step_id="init",
             menu_options=menu_options,
-            description_placeholders={"windows_list": ""},
+            description=preamble,
             title=self._menu_title_from_current_windows(),
         )
 
@@ -2581,10 +2556,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             options_to_persist = await self._save_source(
                 source_entity, new_windows, source_name=current_name
             )
-            unique_id = f"{self._config_entry.entry_id}_{source_slug_from_entity_id(source_entity)}_{idx}"
-            registry = er.async_get(self.hass)
-            if entity_id := registry.async_get_entity_id("sensor", DOMAIN, unique_id):
-                registry.async_remove(entity_id)
             return self._async_create_options_entry(options_to_persist)
         _MAIN_LOGGER.debug("options flow: showing form step_id=confirm_delete")
         return self.async_show_form(
@@ -2654,6 +2625,14 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
         defaults = await _get_config_defaults(self.hass)
         selected_entities = available_source_entities or [source_entity]
 
+        entity_to_slot = {
+            str(s.get(CONF_SOURCE_ENTITY) or "").strip(): str(
+                s.get(CONF_SOURCE_SLOT_ID) or ""
+            ).strip()
+            for s in sources
+            if isinstance(s, dict)
+        }
+
         if user_input is not None and CONF_ENTITIES in user_input:
             requested_entities = _normalize_entities_selector_value(
                 user_input.get(CONF_ENTITIES)
@@ -2676,7 +2655,21 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     for entity_id in removed_entities
                     if entity_id
                 }
+                removed_source_indices = {
+                    i
+                    for i, source in enumerate(sources)
+                    if isinstance(source, dict)
+                    and str(source.get(CONF_SOURCE_ENTITY) or "").strip()
+                    in removed_entities
+                }
+                removed_slots = {
+                    entity_to_slot[eid]
+                    for eid in removed_entities
+                    if entity_to_slot.get(eid)
+                }
+                entry_id = self._config_entry.entry_id
                 registry = er.async_get(self.hass)
+                to_remove: set[str] = set()
                 for entity_entry in registry.entities.get_entries_for_config_entry_id(
                     self._config_entry.entry_id
                 ):
@@ -2684,22 +2677,35 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                         entity_entry.domain == "sensor"
                         and entity_entry.platform == DOMAIN
                         and entity_entry.unique_id
-                        and any(
-                            f"_{source_slug}_window_" in entity_entry.unique_id
-                            for source_slug in removed_source_slugs
-                        )
                     ):
-                        registry.async_remove(entity_entry.entity_id)
+                        uid = entity_entry.unique_id
+                        if any(
+                            f"_{source_slug}_window_" in uid
+                            for source_slug in removed_source_slugs
+                        ) or any(
+                            f"_s{idx}_window_" in uid for idx in removed_source_indices
+                        ) or any(
+                            f"{entry_id}_s{idx}_" in uid
+                            for idx in removed_source_indices
+                        ) or any(
+                            slot and uid.startswith(f"{entry_id}_{slot}_")
+                            for slot in removed_slots
+                        ):
+                            to_remove.add(entity_entry.entity_id)
+                for eid in to_remove:
+                    registry.async_remove(eid)
 
             new_sources: list[dict[str, Any]] = []
             for requested_entity in requested_entities:
                 source_name = _get_entity_friendly_name(
                     self.hass, requested_entity, defaults["window_name"]
                 )
+                sid = entity_to_slot.get(requested_entity) or str(uuid.uuid4())
                 new_sources.append(
                     {
                         CONF_NAME: source_name,
                         CONF_SOURCE_ENTITY: requested_entity,
+                        CONF_SOURCE_SLOT_ID: sid,
                         CONF_WINDOWS: [dict(window) for window in windows],
                     }
                 )
@@ -2764,7 +2770,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     _parse_cost(user_input.get(CONF_IMPORT_RATE_PER_KWH)),
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -2792,7 +2797,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     cost,
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -2832,7 +2836,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     cost,
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -2864,7 +2867,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     cost,
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -2885,7 +2887,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     cost,
                     ranges_for_form,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -2918,7 +2919,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     self._pending_add_cost,
                     self._pending_add_ranges,
                     include_add_another=True,
-                    include_delete=False,
                     num_slots=num_ranges,
                     allow_empty_slots=True,
                 )
@@ -2956,7 +2956,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             self._pending_add_cost,
             self._pending_add_ranges,
             include_add_another=True,
-            include_delete=False,
             num_slots=num_ranges,
             allow_empty_slots=True,
         )
@@ -3068,7 +3067,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                         user_input.get(CONF_EXPORT_RATE_PER_KWH)
                     ),
                     include_add_another=True,
-                    include_delete=False,
                     include_range_delete=False,
                     allow_empty_slots=True,
                     num_slots=num_ranges_for_collect,
@@ -3106,7 +3104,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     ranges_for_form,
                     include_add_another=True,
                     export_rate_per_kwh=export_rate_val,
-                    include_delete=False,
                     include_range_delete=False,
                     allow_empty_slots=True,
                     num_slots=num_ranges_for_collect,
@@ -3152,7 +3149,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     ranges_for_form,
                     export_rate_per_kwh=export_rate_val,
                     include_add_another=True,
-                    include_delete=False,
                     include_range_delete=False,
                     allow_empty_slots=True,
                     num_slots=num_ranges_for_collect,
@@ -3186,7 +3182,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     ranges_for_form,
                     export_rate_per_kwh=export_rate_val,
                     include_add_another=True,
-                    include_delete=False,
                     include_range_delete=False,
                     allow_empty_slots=True,
                     num_slots=num_ranges_for_collect,
@@ -3223,7 +3218,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     self._pending_add_ranges,
                     export_rate_per_kwh=self._pending_add_export_rate,
                     include_add_another=True,
-                    include_delete=False,
                     include_range_delete=False,
                     allow_empty_slots=True,
                     num_slots=num_ranges,
@@ -3257,6 +3251,9 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                     {
                         CONF_NAME: src_name,
                         CONF_SOURCE_ENTITY: src_entity,
+                        CONF_SOURCE_SLOT_ID: str(
+                            source.get(CONF_SOURCE_SLOT_ID) or ""
+                        ).strip(),
                         CONF_WINDOWS: src_windows,
                     }
                 )
@@ -3284,7 +3281,6 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
             ranges_data,
             export_rate_per_kwh=export_rate,
             include_add_another=True,
-            include_delete=False,
             include_range_delete=False,
             allow_empty_slots=True,
             num_slots=num_ranges,

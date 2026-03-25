@@ -4,9 +4,12 @@
     "step": {
       "user": {
         "title": "Select sensor",
-        "description": "Select an energy source that resets daily (e.g. today's import)",
+        "description": "Select a cumulative kWh sensor. Daily \"today\" meters and lifetime totals both work; use the same kind consistently when comparing to other energy entities (see integration readme).",
         "data": {
           "source_entity": "Sensor"
+        },
+        "data_description": {
+          "source_entity": "Monotonic cumulative energy (e.g. sensor.today_load or sensor.total_pv_generation). Mixing today vs lifetime bases across related sensors risks inconsistent comparisons."
         }
       },
       "windows": {
@@ -72,7 +75,7 @@
       },
       "edit_window": {
         "title": "Edit window",
-        "description": "To remove a time range, set its start time equal to or later than its end time. If you clear all ranges, the window will be removed.",
+        "description": "To remove a time range, clear its start time, end time, or both. Keep at least one valid range while finishing setup. To remove the whole window later, open Configure, edit the window, clear all ranges, and confirm when prompted.",
         "data": {
           "window_name": "Window name",
           "import_rate_per_kwh": "Import ($) / kWh",
@@ -143,6 +146,9 @@
         "title": "Window added",
         "submit": "Finish",
         "description": "Window successfully created."
+      },
+      "configure_menu": {
+        "description": "Pick an option below. You can edit the window name, time ranges, import/export rates, or energy sensors."
       }
     },
     "error": {
@@ -168,10 +174,11 @@
   "options": {
     "step": {
       "init": {
-        "title": "Configure Energy Window Tracker (Beta)",
+        "title": "Configure window",
+        "description": "Pick an option below. You can edit the window name, time ranges, import/export rates, or energy sensors.",
         "menu_options": {
-          "list_windows": "\u270f\ufe0f Edit window",
-          "source_entity": "\u26a1\ufe0f Manage energy source(s)"
+          "list_windows": "Edit \u270f\ufe0f",
+          "source_entity": "Update energy source(s) \u26a1\ufe0f"
         }
       },
       "manage_windows": {
@@ -183,7 +190,7 @@
         "submit": "Select"
       },
       "manage_windows_empty": {
-        "title": "Configure Energy Window Tracker (Beta)",
+        "title": "Configure window",
         "description": "No windows yet. Add a window during initial setup."
       },
       "source_entity_confirm": {
@@ -245,7 +252,7 @@
       },
       "edit_window": {
         "title": "Edit window",
-        "description": "To remove a range, set its start time equal to or later than its end time. If all ranges are removed, the window will be deleted after confirmation.",
+        "description": "To remove a time range, clear its start time, end time, or both. If you clear every range and save, you will be asked to confirm deleting this window.",
         "data": {
           "window_name": "Window name",
           "import_rate_per_kwh": "Import ($) / kWh",
