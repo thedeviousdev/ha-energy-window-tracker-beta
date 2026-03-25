@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.63](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.62...v2.3.63) (2026-03-25)
+
+
+### Refactoring
+
+* **energy_window_tracker_beta:** remove legacy migration code ([#52](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/52)) ([469f42a](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/469f42a373871973e3ac48362b1942cfcec9829b))
+
 ## [2.3.62](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.61...v2.3.62) (2026-03-25)
 
 
