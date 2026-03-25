@@ -150,6 +150,25 @@
       "configure_menu": {
         "title": "Configure window",
         "description": "Pick an option below. You can edit the window name, time ranges, import/export rates, or energy sensors."
+      },
+      "list_windows": {
+        "title": "Configure window",
+        "data": {
+          "window_index": "Select a window",
+          "window_fallback": "Window {n}"
+        },
+        "submit": "Select"
+      },
+      "manage_windows_empty": {
+        "title": "Configure window",
+        "description": "No windows yet. Add a window during initial setup."
+      },
+      "source_entity": {
+        "title": "Manage energy source(s)",
+        "data": {
+          "source_entity": "Sensor"
+        },
+        "submit": "Update"
       }
     },
     "error": {
