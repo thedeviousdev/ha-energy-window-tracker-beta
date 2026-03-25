@@ -46,6 +46,7 @@ from .const import (
     DOMAIN,
     STORAGE_KEY,
     STORAGE_VERSION,
+    source_slug_from_entity_id,
 )
 
 _MAIN_LOGGER = logging.getLogger("custom_components.energy_window_tracker_beta")
@@ -371,7 +372,12 @@ class WindowData:
         """
         if not self._snapshot_date:
             return False
-        return self._snapshot_date == self._now().date().isoformat()
+        now = self._now()
+        if now.tzinfo is not None:
+            now_local = now.astimezone(self._tz)
+        else:
+            now_local = now.replace(tzinfo=self._tz)
+        return self._snapshot_date == now_local.date().isoformat()
 
     def get_window_value(self, window: WindowConfig) -> tuple[float | None, str]:
         """Get energy value and status for a window (same-day only; start < end).
@@ -381,7 +387,13 @@ class WindowData:
         """
         total = self.get_source_value()
         now = self._now()
-        current_seconds = now.hour * 3600 + now.minute * 60 + now.second
+        if now.tzinfo is not None:
+            now_local = now.astimezone(self._tz)
+        else:
+            now_local = now.replace(tzinfo=self._tz)
+        current_seconds = (
+            now_local.hour * 3600 + now_local.minute * 60 + now_local.second
+        )
         if not self._snapshots_valid_today():
             snap = WindowSnapshots(None, None)
         else:
@@ -416,12 +428,20 @@ class WindowData:
         return 0.0, "after_window (no snapshots)"
 
     def take_late_start_snapshot(self, window_index: int) -> bool:
-        """If we're during the window with no start snapshot, use 0 as baseline so the window shows current total.
+        """If we're during the window with no start snapshot, set a baseline.
 
-        (Using current value as baseline would zero the display until more energy is used.)
+        Daily-reset ("today") meters have a `last_reset` attribute; for those we keep
+        the legacy baseline of `0.0`.
+
+        Lifetime/total meters don't reset daily; for those we use the current source
+        value as baseline so the displayed window energy starts at 0.
         """
-        if self.get_source_value() is None:
+        now_total = self.get_source_value()
+        if now_total is None:
             return False
+        state = self.hass.states.get(self._source_entity)
+        last_reset = state.attributes.get("last_reset") if state else None
+        baseline = 0.0 if last_reset is not None else now_total
         snap = self._snapshots.get(window_index) or WindowSnapshots(None, None)
         if snap.snapshot_start is not None:
             return False
@@ -438,7 +458,7 @@ class WindowData:
             if not self._snapshot_date:
                 self._snapshot_date = self._now().date().isoformat()
             self._snapshots[window_index] = WindowSnapshots(
-                snapshot_start=0.0,
+                snapshot_start=baseline,
                 snapshot_end=None,
             )
             self._schedule_save()
@@ -450,6 +470,26 @@ class WindowData:
         stored = await self._store.async_load()
         today = self._now().date().isoformat()
         if stored:
+            stored_source_entity = stored.get("source_entity")
+            if (
+                stored_source_entity is not None
+                and stored_source_entity != self._source_entity
+            ):
+                # If the configured source entity changed but we reused the same
+                # storage slot, the stored baselines no longer apply.
+                self._snapshot_date = today
+                self._snapshots = {
+                    w.index: WindowSnapshots(snapshot_start=None, snapshot_end=None)
+                    for w in self._windows
+                }
+                _MAIN_LOGGER.debug(
+                    "sensor: load - %s stored source_entity=%s != current %s, cleared snapshots",
+                    self._source_entity,
+                    stored_source_entity,
+                    self._source_entity,
+                )
+                return
+
             self._snapshot_date = stored.get("snapshot_date")
             if self._snapshot_date != today:
                 self._snapshot_date = today
@@ -496,7 +536,11 @@ class WindowData:
             for idx, s in self._snapshots.items()
         }
         await self._store.async_save(
-            {"windows": snapshots_data, "snapshot_date": self._snapshot_date}
+            {
+                "source_entity": self._source_entity,
+                "windows": snapshots_data,
+                "snapshot_date": self._snapshot_date,
+            }
         )
         _MAIN_LOGGER.debug(
             "sensor: save - %s snapshot_date=%s %s window(s)",
@@ -704,7 +748,7 @@ async def async_setup_entry(
         source_name = source_config.get(CONF_NAME) or "Window"
         source_slot_id = str(source_config.get(CONF_SOURCE_SLOT_ID) or "").strip()
         if not source_slot_id:
-            _MAIN_LOGGER.warning(
+            _MAIN_LOGGER.debug(
                 "sensor: async_setup_entry - missing source_slot_id for %r, skipping",
                 source_entity,
             )
@@ -714,11 +758,11 @@ async def async_setup_entry(
             continue
 
         slot_token = source_slot_id.replace("-", "")
-        store = Store(
-            hass,
-            STORAGE_VERSION,
-            f"{STORAGE_KEY}_{entry.entry_id}_{slot_token}",
+        store_name = (
+            f"{STORAGE_KEY}_{entry.entry_id}_{slot_token}_"
+            f"{source_slug_from_entity_id(source_entity)}"
         )
+        store = Store(hass, STORAGE_VERSION, store_name)
         source_display_name = _source_display_name(hass, source_entity)
         # Use HA configured timezone so window start/end and "today" match the frontend
         tz_str = getattr(hass.config, "time_zone", None) or "UTC"
@@ -842,6 +886,11 @@ class WindowEnergySensor(RestoreSensor):
         self._last_source_value: float | None = None
         self._last_status: str | None = None
 
+        # Register for snapshot/source updates immediately so tests (and early
+        # updates during setup) can't miss the callback due to async_added_to_hass()
+        # scheduling.
+        self._data.add_update_callback(self._handle_data_update)
+
     async def async_added_to_hass(self) -> None:
         """Restore state and register listeners."""
         _MAIN_LOGGER.debug(
@@ -853,8 +902,6 @@ class WindowEnergySensor(RestoreSensor):
 
         if (last := await self.async_get_last_sensor_data()) is not None:
             self._attr_native_value = last.native_value
-
-        self._data.add_update_callback(self._handle_data_update)
 
         self.async_on_remove(
             async_track_state_change_event(
@@ -931,8 +978,8 @@ class WindowEnergySensor(RestoreSensor):
                     "sensor: state updated - %r (value or status changed)",
                     self._window_name,
                 )
-            # Must run on event loop; callback can be invoked from another thread (e.g. time_change)
-            self.hass.add_job(self.async_write_ha_state)
+            # Must run on the event loop; callback can be invoked from another thread (e.g. time_change)
+            self.hass.loop.call_soon_threadsafe(self.async_write_ha_state)
 
     def _update_value(self) -> None:
         total_value: float | None = None

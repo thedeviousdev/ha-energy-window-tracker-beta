@@ -544,6 +544,118 @@ async def test_sensor_stale_snapshot_discarded_when_late_snapshot_disabled(
 
 
 @pytest.mark.asyncio
+async def test_sensor_late_start_snapshot_total_source_baseline_zeroes_immediately(
+    hass: HomeAssistant,
+) -> None:
+    """[Happy] For lifetime/total sources, late-start snapshot baseline uses current total.
+
+    If `last_reset` is not present, the late-start snapshot should make the displayed
+    window energy start at 0 immediately.
+    """
+    entry = _windows_based_entry(
+        entry_id="snap_late_start_total_id",
+        window_groups=[
+            {
+                CONF_WINDOW_NAME: "Peak",
+                CONF_IMPORT_RATE_PER_KWH: 0.0,
+                CONF_ENTITIES: ["sensor.today_load"],
+                CONF_RANGES: [{CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "17:00"}],
+            }
+        ],
+        title="snap_late_start_total",
+    )
+    entry.add_to_hass(hass)
+    # No last_reset attribute -> treat as lifetime/total
+    hass.states.async_set(
+        "sensor.today_load",
+        "5.0",
+        attributes={"last_reset": None},
+    )
+
+    noon_today = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0)
+    stale = "2020-01-01"
+    stored = {
+        "snapshot_date": stale,
+        "windows": {"0": {"snapshot_start": 1.0, "snapshot_end": None}},
+    }
+    with (
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+            new_callable=AsyncMock,
+            return_value=stored,
+        ),
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.dt_util.now",
+            return_value=noon_today,
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    state = _state_for_entry(hass, entry.entry_id)
+    assert state is not None
+    assert state.attributes.get("status") == "during_window"
+    assert float(state.state) == 0.0
+
+
+@pytest.mark.asyncio
+async def test_sensor_snapshots_cleared_when_source_entity_changes(
+    hass: HomeAssistant,
+) -> None:
+    """[Unhappy] Stored snapshots from a different source entity are cleared.
+
+    If we reload with the same storage slot but the configured `source_entity`
+    changes, we must not reuse old baselines.
+    """
+    entry = _windows_based_entry(
+        entry_id="snap_source_entity_changed",
+        window_groups=[
+            {
+                CONF_WINDOW_NAME: "Peak",
+                CONF_IMPORT_RATE_PER_KWH: 0.0,
+                CONF_ENTITIES: ["sensor.today_load"],
+                CONF_RANGES: [{CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "17:00"}],
+            }
+        ],
+        title="snap_source_entity_changed_title",
+    )
+    entry.add_to_hass(hass)
+    hass.states.async_set("sensor.today_load", "5.0")
+
+    noon_today = datetime.now().replace(hour=12, minute=0, second=0, microsecond=0)
+    today_iso = noon_today.date().isoformat()
+    stored = {
+        # Simulate stored data for a different source entity.
+        "source_entity": "sensor.other_load",
+        "snapshot_date": today_iso,
+        "windows": {"0": {"snapshot_start": 1.0, "snapshot_end": None}},
+    }
+
+    with (
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+            new_callable=AsyncMock,
+            return_value=stored,
+        ),
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.dt_util.now",
+            return_value=noon_today,
+        ),
+        patch(
+            "custom_components.energy_window_tracker_beta.sensor.WindowData.take_late_start_snapshot",
+            return_value=False,
+        ),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    state = _state_for_entry(hass, entry.entry_id)
+    assert state is not None
+    assert state.attributes.get("status") == "during_window (no snapshot)"
+    assert float(state.state) == 0.0
+
+
+@pytest.mark.asyncio
 async def test_sensor_invalid_config_times_expose_config_warnings(
     hass: HomeAssistant,
 ) -> None:
