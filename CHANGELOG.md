@@ -1,5 +1,17 @@
 # Changelog
 
+## [2.3.65](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.64...v2.3.65) (2026-03-25)
+
+
+### Bug Fixes
+
+* **sensor:** show export credit with 4 decimals ([#59](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/59)) ([6305b37](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/6305b37c4d442fa436034090fcd40aa09a03df25))
+
+
+### Miscellaneous Chores
+
+* **readme+ui:** reorder badges + remove bold labels ([#57](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/57)) ([84d5797](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/84d5797a14ce512954ce7f7539b74a38832288b0))
+
 ## [2.3.64](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.63...v2.3.64) (2026-03-25)
 
 
