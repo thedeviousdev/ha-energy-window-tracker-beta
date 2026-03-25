@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.3.64](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.63...v2.3.64) (2026-03-25)
+
+
+### Bug Fixes
+
+* **i18n:** add missing config flow step translations ([#54](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/54)) ([c1bec6b](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/c1bec6bbf6b0be53a5f9fdd871bde78abb00a99d))
+* **sensor:** reset snapshots when source entity changes ([#56](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/56)) ([aba20f4](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/aba20f4b70ca0fa7a8ab8017ed307cdb97aa6c33))
+
 ## [2.3.63](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.62...v2.3.63) (2026-03-25)
 
 
