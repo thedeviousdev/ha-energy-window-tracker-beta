@@ -33,9 +33,6 @@ DEFAULT_WINDOW_END = "14:00"
 STORAGE_VERSION = 1
 STORAGE_KEY = "energy_window_tracker_beta_snapshots"
 
-# Internal: after sensor platform runs once, legacy unique_id registry migration is skipped.
-REGISTRY_UNIQUE_ID_MIGRATION_DONE_KEY = "_registry_unique_id_migration_v3"
-
 
 def source_slug_from_entity_id(entity_id: str, fallback: str = "source_0") -> str:
     """Stable slug from entity_id for storage, unique_id, and entity name."""

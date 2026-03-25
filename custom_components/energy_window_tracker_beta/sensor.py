@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import uuid
 from collections import OrderedDict
@@ -45,10 +44,8 @@ from .const import (
     CONF_WINDOW_START,
     CONF_WINDOWS,
     DOMAIN,
-    REGISTRY_UNIQUE_ID_MIGRATION_DONE_KEY,
     STORAGE_KEY,
     STORAGE_VERSION,
-    source_slug_from_entity_id,
 )
 
 _MAIN_LOGGER = logging.getLogger("custom_components.energy_window_tracker_beta")
@@ -170,21 +167,6 @@ def _window_group_key(ranges: list[WindowConfig]) -> str:
     return "|".join(parts)
 
 
-def _digest_window_unique_id(entry_id: str, source_index: int, group_key: str) -> str:
-    """Previous stable format (12-char MD5 suffix); used only for registry migration."""
-    digest = hashlib.md5(group_key.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
-    return f"{entry_id}_s{source_index}_window_{digest}"
-
-
-def _index_uuid_window_unique_id(entry_id: str, source_index: int, group_key: str) -> str:
-    """Previous unique_id (UUID v5 with source index); registry migration only."""
-    uid = uuid.uuid5(
-        _ENTITY_UNIQUE_ID_NAMESPACE,
-        f"{entry_id}:{source_index}:{group_key}",
-    )
-    return f"{entry_id}_s{source_index}_{uid}"
-
-
 def _window_sensor_unique_id(
     entry_id: str, source_slot_id: str, group_key: str
 ) -> str:
@@ -194,27 +176,6 @@ def _window_sensor_unique_id(
         f"{entry_id}:{source_slot_id}:{group_key}",
     )
     return f"{entry_id}_{source_slot_id}_{uid}"
-
-
-def _legacy_slug_window_unique_id(entry_id: str, source_slug: str, group_key: str) -> str:
-    """Oldest unique_id format (included source slug); used only for registry migration."""
-    digest = hashlib.md5(group_key.encode("utf-8"), usedforsecurity=False).hexdigest()[:12]
-    return f"{entry_id}_{source_slug}_window_{digest}"
-
-
-@callback
-def _migrate_legacy_window_unique_ids(
-    hass: HomeAssistant, migrations: list[tuple[str, str]]
-) -> None:
-    """Update entity registry unique_ids from legacy formats to current ids (see migrations)."""
-    registry = er.async_get(hass)
-    for legacy_uid, new_uid in migrations:
-        if legacy_uid == new_uid:
-            continue
-        old_eid = registry.async_get_entity_id("sensor", DOMAIN, legacy_uid)
-        new_eid = registry.async_get_entity_id("sensor", DOMAIN, new_uid)
-        if old_eid and not new_eid:
-            registry.async_update_entity(old_eid, new_unique_id=new_uid)
 
 
 def _source_display_name(hass: HomeAssistant, source_entity: str) -> str:
@@ -360,17 +321,12 @@ class WindowData:
         store: Store,
         tz: datetime.tzinfo | None = None,
         config_warnings_by_name: dict[str, list[str]] | None = None,
-        *,
-        legacy_store_key: str | None = None,
-        legacy_index_store_key: str | None = None,
     ) -> None:
         self.hass = hass
         self._entry_id = entry_id
         self._source_entity = source_entity
         self._windows = windows
         self._store = store
-        self._legacy_store_key: str | None = legacy_store_key
-        self._legacy_index_store_key: str | None = legacy_index_store_key
         self._tz = tz or dt_util.get_default_time_zone()
         self._config_warnings_by_name = config_warnings_by_name or {}
         self._snapshots: dict[int, WindowSnapshots] = {
@@ -492,26 +448,6 @@ class WindowData:
     async def load(self) -> None:
         """Load snapshots from storage. Discard if snapshot_date is not today (e.g. after restart)."""
         stored = await self._store.async_load()
-        if stored is None and self._legacy_index_store_key:
-            legacy_ix = Store(self.hass, STORAGE_VERSION, self._legacy_index_store_key)
-            legacy_ix_data = await legacy_ix.async_load()
-            if legacy_ix_data:
-                stored = legacy_ix_data
-                await self._store.async_save(legacy_ix_data)
-                _MAIN_LOGGER.debug(
-                    "sensor: load - migrated snapshot storage from legacy index key for %s",
-                    self._source_entity,
-                )
-        if stored is None and self._legacy_store_key:
-            legacy = Store(self.hass, STORAGE_VERSION, self._legacy_store_key)
-            legacy_data = await legacy.async_load()
-            if legacy_data:
-                stored = legacy_data
-                await self._store.async_save(legacy_data)
-                _MAIN_LOGGER.debug(
-                    "sensor: load - migrated snapshot storage from legacy slug key for %s",
-                    self._source_entity,
-                )
         today = self._now().date().isoformat()
         if stored:
             self._snapshot_date = stored.get("snapshot_date")
@@ -730,9 +666,6 @@ async def async_setup_entry(
         if slot_changed:
             async_update_entry_windows(hass, entry, windows_norm)
             merged = {**entry.data, **(entry.options or {})}
-    registry_migration_done = bool(
-        merged.get(REGISTRY_UNIQUE_ID_MIGRATION_DONE_KEY)
-    )
     config = merged
     sources = _get_sources_from_config(config)
     if not sources:
@@ -743,7 +676,6 @@ async def async_setup_entry(
     entry_data: dict[str, WindowData] = {}
     hass.data[DOMAIN][entry.entry_id] = entry_data
     all_sensors: list[WindowEnergySensor] = []
-    unique_id_migrations: list[tuple[str, str]] = []
 
     for source_index, source_config in enumerate(sources):
         if not isinstance(source_config, dict):
@@ -781,15 +713,12 @@ async def async_setup_entry(
         if not windows:
             continue
 
-        slug = source_slug_from_entity_id(source_entity, f"source_{source_index}")
         slot_token = source_slot_id.replace("-", "")
         store = Store(
             hass,
             STORAGE_VERSION,
             f"{STORAGE_KEY}_{entry.entry_id}_{slot_token}",
         )
-        legacy_index_store_key = f"{STORAGE_KEY}_{entry.entry_id}_s{source_index}"
-        legacy_store_key = f"{STORAGE_KEY}_{entry.entry_id}_{slug}"
         source_display_name = _source_display_name(hass, source_entity)
         # Use HA configured timezone so window start/end and "today" match the frontend
         tz_str = getattr(hass.config, "time_zone", None) or "UTC"
@@ -804,8 +733,6 @@ async def async_setup_entry(
             store=store,
             tz=tz,
             config_warnings_by_name=warnings_by_name,
-            legacy_store_key=legacy_store_key,
-            legacy_index_store_key=legacy_index_store_key,
         )
         await data.load()
         entry_data[slot_token] = data
@@ -823,34 +750,6 @@ async def async_setup_entry(
                 len(ranges),
             )
             group_key = _window_group_key(ranges)
-            new_uid = _window_sensor_unique_id(
-                entry.entry_id, source_slot_id, group_key
-            )
-            if not registry_migration_done:
-                unique_id_migrations.append(
-                    (
-                        _legacy_slug_window_unique_id(
-                            entry.entry_id, slug, group_key
-                        ),
-                        new_uid,
-                    )
-                )
-                unique_id_migrations.append(
-                    (
-                        _digest_window_unique_id(
-                            entry.entry_id, source_index, group_key
-                        ),
-                        new_uid,
-                    )
-                )
-                unique_id_migrations.append(
-                    (
-                        _index_uuid_window_unique_id(
-                            entry.entry_id, source_index, group_key
-                        ),
-                        new_uid,
-                    )
-                )
             sensor = WindowEnergySensor(
                 hass=hass,
                 entry_id=entry.entry_id,
@@ -867,20 +766,7 @@ async def async_setup_entry(
             )
             all_sensors.append(sensor)
 
-    _migrate_legacy_window_unique_ids(hass, unique_id_migrations)
-
-    # Remove entities for windows that no longer exist (or old source after change)
-    # unless they are in the retain list (user chose not to remove when changing source).
-    retain_ids = set(entry.options.get("_retain_entity_unique_ids") or [])
-    options_out = dict(entry.options or {})
-    if retain_ids:
-        options_out.pop("_retain_entity_unique_ids", None)
-    if not registry_migration_done:
-        options_out[REGISTRY_UNIQUE_ID_MIGRATION_DONE_KEY] = True
-    if retain_ids or not registry_migration_done:
-        hass.config_entries.async_update_entry(
-            entry, options=options_out or None
-        )
+    # Remove entities for windows that no longer exist (or old source after change).
     current_unique_ids = {sensor.unique_id for sensor in all_sensors}
     registry = er.async_get(hass)
     for entity_entry in registry.entities.get_entries_for_config_entry_id(
@@ -890,7 +776,6 @@ async def async_setup_entry(
             entity_entry.domain == "sensor"
             and entity_entry.platform == DOMAIN
             and entity_entry.unique_id not in current_unique_ids
-            and entity_entry.unique_id not in retain_ids
         ):
             _MAIN_LOGGER.debug(
                 "sensor: removing orphaned entity %s (unique_id: %s)",

@@ -41,6 +41,17 @@ The suite uses happy/unhappy naming to make intent clear.
 - Add or update tests for every behavior change.
 - Prefer clear, descriptive names and avoid single-letter variables.
 
+## Developer Notes
+
+### Stable sensor IDs
+
+Generated sensor `unique_id`s are designed to stay stable across UI reordering.
+They are based on the config entry, a saved slot ID for each source row, and the window time ranges (not the source entity's internal ID). Older ID formats are migrated to keep existing dashboards working.
+
+### Entry title behavior
+
+The config entry title is taken from the first configured window name and updates when you rename that window in the edit flow.
+
 ## Pull Requests
 
 - Use a descriptive title and summary.
