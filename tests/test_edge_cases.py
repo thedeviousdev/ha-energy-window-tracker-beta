@@ -10,6 +10,7 @@ import inspect
 from datetime import datetime
 from pathlib import Path
 from unittest.mock import AsyncMock, patch
+from uuid import UUID
 
 import pytest
 import voluptuous_serialize
@@ -24,14 +25,20 @@ from custom_components.energy_window_tracker_beta.const import (
     CONF_ENTITIES,
     CONF_IMPORT_RATE_PER_KWH,
     CONF_RANGES,
+    CONF_SOURCE_SLOT_ID,
     CONF_WINDOW_END,
     CONF_WINDOW_NAME,
     CONF_WINDOW_START,
     CONF_WINDOWS,
     DOMAIN,
-    source_slug_from_entity_id,
 )
-from custom_components.energy_window_tracker_beta.sensor import _stable_window_unique_id
+from custom_components.energy_window_tracker_beta.sensor import (
+    _window_sensor_unique_id,
+    source_entity_item,
+)
+
+# Deterministic source_slot_id when sensor.uuid.uuid4 is patched in unique_id tests.
+_FIXED_SOURCE_SLOT = "00000000-0000-4000-8000-000000000001"
 
 
 def _get_tracker_sensors(hass: HomeAssistant, entry_id: str) -> list:
@@ -583,10 +590,13 @@ async def test_unique_ids_stable_when_window_groups_reordered(
     """[Happy] Reordering window groups must not swap unique_ids."""
     entry_id = "reorder_unique_id"
     source_entity = "sensor.today_load"
-    source_slug = source_slug_from_entity_id(source_entity, "source_0")
 
-    peak_uid = _stable_window_unique_id(entry_id, source_slug, "09:00:00-12:00:00")
-    off_uid = _stable_window_unique_id(entry_id, source_slug, "12:00:00-17:00:00")
+    peak_uid = _window_sensor_unique_id(
+        entry_id, _FIXED_SOURCE_SLOT, "09:00:00-12:00:00"
+    )
+    off_uid = _window_sensor_unique_id(
+        entry_id, _FIXED_SOURCE_SLOT, "12:00:00-17:00:00"
+    )
 
     entry = _windows_based_entry(
         entry_id=entry_id,
@@ -610,12 +620,16 @@ async def test_unique_ids_stable_when_window_groups_reordered(
     hass.states.async_set(source_entity, "0")
 
     with patch(
-        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
-        new_callable=AsyncMock,
-        return_value={},
+        "custom_components.energy_window_tracker_beta.sensor.uuid.uuid4",
+        return_value=UUID(_FIXED_SOURCE_SLOT),
     ):
-        assert await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
+        with patch(
+            "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+            new_callable=AsyncMock,
+            return_value={},
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
 
     initial = _unique_ids_by_entity_id(hass, entry.entry_id)
     assert set(initial.values()) == {peak_uid, off_uid}
@@ -651,10 +665,13 @@ async def test_unique_ids_happy_stay_stable_when_window_renamed(
     """[Happy] Renaming one window keeps unique_ids when ranges are unchanged."""
     entry_id = "rename_unique_id"
     source_entity = "sensor.today_load"
-    source_slug = source_slug_from_entity_id(source_entity, "source_0")
 
-    peak_uid = _stable_window_unique_id(entry_id, source_slug, "09:00:00-12:00:00")
-    off_uid = _stable_window_unique_id(entry_id, source_slug, "12:00:00-17:00:00")
+    peak_uid = _window_sensor_unique_id(
+        entry_id, _FIXED_SOURCE_SLOT, "09:00:00-12:00:00"
+    )
+    off_uid = _window_sensor_unique_id(
+        entry_id, _FIXED_SOURCE_SLOT, "12:00:00-17:00:00"
+    )
 
     entry = _windows_based_entry(
         entry_id=entry_id,
@@ -678,12 +695,16 @@ async def test_unique_ids_happy_stay_stable_when_window_renamed(
     hass.states.async_set(source_entity, "0")
 
     with patch(
-        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
-        new_callable=AsyncMock,
-        return_value={},
+        "custom_components.energy_window_tracker_beta.sensor.uuid.uuid4",
+        return_value=UUID(_FIXED_SOURCE_SLOT),
     ):
-        assert await hass.config_entries.async_setup(entry.entry_id)
-        await hass.async_block_till_done()
+        with patch(
+            "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+            new_callable=AsyncMock,
+            return_value={},
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
 
     initial = _unique_ids_by_entity_id(hass, entry.entry_id)
     assert set(initial.values()) == {peak_uid, off_uid}
@@ -717,6 +738,76 @@ async def test_unique_ids_happy_stay_stable_when_window_renamed(
         "Off-Peak should keep same unique_id and entity_id"
     )
     assert peak_uid in set(after.values())
+
+
+@pytest.mark.asyncio
+async def test_unique_ids_stable_when_source_entity_id_changes(
+    hass: HomeAssistant,
+) -> None:
+    """Updating the configured source entity id (same slot) keeps window sensor unique_ids."""
+    entry_id = "rename_source_entity_uid"
+    base_window = {
+        CONF_WINDOW_NAME: "Peak",
+        CONF_IMPORT_RATE_PER_KWH: 0.0,
+        CONF_ENTITIES: ["sensor.old_load"],
+        CONF_RANGES: [{CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "12:00"}],
+    }
+    expected_uid = _window_sensor_unique_id(
+        entry_id, _FIXED_SOURCE_SLOT, "09:00:00-12:00:00"
+    )
+
+    entry = _windows_based_entry(
+        entry_id=entry_id,
+        window_groups=[base_window],
+        title="Peak",
+    )
+    entry.add_to_hass(hass)
+    hass.states.async_set("sensor.old_load", "0")
+
+    with patch(
+        "custom_components.energy_window_tracker_beta.sensor.uuid.uuid4",
+        return_value=UUID(_FIXED_SOURCE_SLOT),
+    ):
+        with patch(
+            "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+            new_callable=AsyncMock,
+            return_value={},
+        ):
+            assert await hass.config_entries.async_setup(entry.entry_id)
+            await hass.async_block_till_done()
+
+    before = _unique_ids_by_entity_id(hass, entry.entry_id)
+    assert set(before.values()) == {expected_uid}
+
+    assert await hass.config_entries.async_unload(entry.entry_id)
+    entry2 = hass.config_entries.async_get_entry(entry.entry_id)
+    assert entry2 is not None
+    w0 = (entry2.data.get(CONF_WINDOWS) or [])[0]
+    ent0 = (w0.get(CONF_ENTITIES) or [])[0]
+    if isinstance(ent0, dict) and ent0.get(CONF_SOURCE_SLOT_ID):
+        new_entities = [
+            source_entity_item(
+                "sensor.new_load",
+                source_slot_id=str(ent0[CONF_SOURCE_SLOT_ID]),
+            )
+        ]
+    else:
+        new_entities = ["sensor.new_load"]
+    updated = {**base_window, CONF_ENTITIES: new_entities}
+    hass.config_entries.async_update_entry(entry2, data={CONF_WINDOWS: [updated]})
+    hass.states.async_set("sensor.new_load", "0")
+
+    with patch(
+        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+        new_callable=AsyncMock,
+        return_value={},
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    after = _unique_ids_by_entity_id(hass, entry.entry_id)
+    assert set(after.values()) == {expected_uid}
+    assert after == before
 
 
 @pytest.mark.asyncio

@@ -24,7 +24,6 @@ from custom_components.energy_window_tracker_beta.const import (
     CONF_WINDOW_START,
     CONF_WINDOWS,
     DOMAIN,
-    source_slug_from_entity_id,
 )
 
 
@@ -157,6 +156,7 @@ async def test_options_flow_happy_opens_from_window_setup_entry(
     assert result["type"] is data_entry_flow.FlowResultType.MENU
     assert result["step_id"] == "init"
     assert result.get("title") == "Configure Peak"
+    assert result.get("description")
 
 
 @pytest.mark.asyncio
@@ -660,19 +660,17 @@ async def test_options_source_entity_happy_remove_one_keeps_other_registry_entit
     entry.add_to_hass(hass)
 
     registry = er.async_get(hass)
-    load_slug = source_slug_from_entity_id("sensor.today_load")
-    import_slug = source_slug_from_entity_id("sensor.today_import")
     load_entity = registry.async_get_or_create(
         "sensor",
         DOMAIN,
-        f"{entry.entry_id}_{load_slug}_window_keep",
+        f"{entry.entry_id}_s0_window_keep",
         config_entry=entry,
         suggested_object_id="keep_entity",
     )
     import_entity = registry.async_get_or_create(
         "sensor",
         DOMAIN,
-        f"{entry.entry_id}_{import_slug}_window_remove",
+        f"{entry.entry_id}_s1_window_remove",
         config_entry=entry,
         suggested_object_id="remove_entity",
     )
@@ -862,8 +860,13 @@ async def test_window_entities_happy_creates_one_window_per_selected_entity(
     windows = entries[0].data.get(CONF_WINDOWS) or []
     assert len(windows) == 2
     entity_sets = [w.get("entities") for w in windows]
-    assert ["sensor.today_load"] in entity_sets
-    assert ["sensor.today_import"] in entity_sets
+
+    def _entity_id(item: str | dict) -> str:
+        return item["entity_id"] if isinstance(item, dict) else item
+
+    entity_id_rows = [[_entity_id(x) for x in row] for row in entity_sets]
+    assert ["sensor.today_load"] in entity_id_rows
+    assert ["sensor.today_import"] in entity_id_rows
     names = {w.get(CONF_WINDOW_NAME) for w in windows}
     assert names == {"Peak"}
 
@@ -1581,6 +1584,7 @@ async def test_config_source_entity_happy_loads_after_window_setup_finish(
     result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] is data_entry_flow.FlowResultType.MENU
     assert result["step_id"] == "configure_menu"
+    assert result.get("description")
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"], {"next_step_id": "source_entity"}
