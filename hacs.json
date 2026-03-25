@@ -1,4 +1,5 @@
 {
   "name": "Energy Window Tracker (Beta)",
-  "content_in_root": false
+  "content_in_root": false,
+  "description": "Tracks energy usage over custom time windows in Home Assistant. Snapshots at window start and end are stored so sensors survive restarts."
 }
