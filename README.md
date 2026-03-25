@@ -11,7 +11,7 @@ You can use multiple source entities, multiple ranges. The integration stores co
 
 ## Requirements
 
-You need Home Assistant with custom integrations enabled, plus a **cumulative** energy sensor (kWh) that increases over time. **Daily “today” meters** (reset at midnight) and **lifetime / total** counters (monotonic since install or inverter lifetime) are both valid sources; see [Energy source: today vs totals](#energy-source-today-vs-totals).
+You need Home Assistant with custom integrations enabled, plus a **cumulative** energy sensor (kWh) that normally goes up over time. You can use either daily meters (reset at midnight) or lifetime/total counters; see [Energy source: today vs totals](#energy-source-today-vs-totals).
 
 ## Installation
 
@@ -31,10 +31,8 @@ You need Home Assistant with custom integrations enabled, plus a **cumulative** 
 ## Setup
 
 Go to **Settings -> Devices & Services -> Add Integration** and select **Energy Window Tracker (Beta)**.  
-In the setup form, choose a name, set cost per kWh if you want, and add one or more ranges with `Start time #N` and `End time #N`.  
-Then pick one or more source entities and click **Add**.
-
-After entities are added, you will see a confirmation screen where you can jump straight back to editing.
+In setup, define your window and time range(s), then choose one or more source entities and click **Add**.  
+You will then see a confirmation screen that lets you jump back into editing.
 
 ## Managing Configuration
 
@@ -49,19 +47,16 @@ You may use **either**:
 - **Today** (or other daily-reset) sensors whose value is cumulative **since the last reset** (often midnight), or  
 - **Total / lifetime** sensors whose value is cumulative **since install** (or since the inverter began reporting totals).
 
-The integration derives window usage from **differences** between snapshots, so both kinds work as long as the entity is **monotonic** across the window (aside from known resets you account for).
+The integration calculates energy by looking at the difference between snapshots. Both sensor types work as long as the value normally moves upward during the window (except for resets you expect).
 
-**Use one style consistently** when you relate this integration’s output to **other** energy entities (import, export, load, battery, templates, or dashboards). Mixing **today** for one metric and **lifetime totals** for another without aligning them to the same period or basis will produce **misleading or inconsistent comparisons** (“dirty” data). Prefer the same counter class for every quantity in a given balance or formula.
+Use one style consistently when comparing with other energy values (import, export, load, battery, templates, dashboards). Mixing daily-reset values with lifetime totals can lead to confusing comparisons unless you first align them to the same period.
 
-**Trade-offs:** Today-style counters are easy to reason about for same-calendar-day windows but **reset at midnight** (windows that cross midnight need care). Lifetime totals behave well for **deltas over arbitrary intervals**; numeric magnitude does not meaningfully affect Home Assistant database size compared to how often states change.
+Trade-offs: daily-reset sensors are simple for same-day windows, but they reset at midnight. Lifetime totals are usually better for windows over any time span, including across midnight.
 
 ## Notes and Behavior
 
-- **Generated sensor entity IDs** use a stable registry `unique_id` built from your **config entry id**, a persisted **source slot id** (UUID per energy sensor row), and a **UUID v5** derived from the window’s **time ranges** — not the source entity’s object id. Reordering sources in the UI does **not** change those ids as long as each row keeps its slot id. After upgrading, existing entities are **migrated** from older slug-, index-, and hash-suffix ids so dashboards keep working.
 - Validation enforces chronological ranges, including seconds precision.
-- From **Configure** (Options), removing all ranges and saving prompts confirmation to delete that window; during initial setup the edit flow requires at least one valid range.
-- The integration entry title is derived from the first configured window name and updates when you rename the window in the edit flow.
-- The integration interprets window times using Home Assistant's configured local timezone.
+- Window logic uses your Home Assistant timezone (`Settings -> System -> General`).
 
 ## Contributing
 
@@ -73,9 +68,6 @@ If UI labels appear as raw keys, restart Home Assistant to refresh translation c
 
 If source values are not updating as expected, check that the entity exists, has a numeric state, is cumulative, and your ranges are valid/in order. If comparisons to other sensors look wrong, confirm you are not mixing **today** and **lifetime** bases without converting them consistently (see [Energy source: today vs totals](#energy-source-today-vs-totals)).
 
-### Home Assistant timezone
-Window logic uses your Home Assistant instance timezone.
-You can check it in Home Assistant under `Settings -> System -> General`.
 
 For bugs and feature requests, use:
 
