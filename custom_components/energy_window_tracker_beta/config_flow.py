@@ -2036,8 +2036,8 @@ def _entry_using_source_entity(
 def _build_init_menu_options() -> dict[str, str]:
     """Build main menu as step_id -> label (dict so labels show without translation lookup)."""
     return {
-        "list_windows": "**✏️ Edit**",
-        "source_entity": "**⚡️ Update energy source(s)**",
+        "list_windows": "✏️ Edit",
+        "source_entity": "⚡️ Update energy source(s)",
     }
 
 
