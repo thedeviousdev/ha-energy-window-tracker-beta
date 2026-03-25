@@ -151,6 +151,76 @@ async def test_sensor_attributes_import_cost_and_export_credit(
     assert state.attributes.get("export_rate_per_kwh") == 0.03
 
 
+@pytest.mark.asyncio
+async def test_sensor_export_credit_rounding_across_multiple_ranges(
+    hass: HomeAssistant,
+) -> None:
+    """[Unhappy/Regression] Export credit sums before rounding.
+
+    Per-range rounding to 2 decimals can undercount when multiple ranges each produce
+    credits < $0.01, but the total should round up.
+    """
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="ExportCreditRounding",
+        data={
+            CONF_WINDOWS: [
+                {
+                    CONF_WINDOW_NAME: "Feed in",
+                    CONF_IMPORT_RATE_PER_KWH: 0.0,
+                    CONF_EXPORT_RATE_PER_KWH: 0.003,
+                    CONF_ENTITIES: ["sensor.today_energy_export"],
+                    CONF_RANGES: [
+                        {CONF_WINDOW_START: "09:00", CONF_WINDOW_END: "10:00"},
+                        {CONF_WINDOW_START: "10:00", CONF_WINDOW_END: "11:00"},
+                    ],
+                }
+            ]
+        },
+        options={},
+        entry_id="export_credit_rounding_entry",
+    )
+    entry.add_to_hass(hass)
+    hass.states.async_set("sensor.today_energy_export", "0")
+
+    tz = dt_util.get_time_zone(hass.config.time_zone or "UTC") or dt_util.UTC
+    noon_today = dt_util.now(tz).replace(
+        hour=12, minute=0, second=0, microsecond=0
+    )
+    today_iso = noon_today.date().isoformat()
+    # After window: energy = snapshot_end - snapshot_start.
+    # Each range energy yields credit = 1.334 * 0.003 = 0.004002 -> rounds to 0.00,
+    # but the combined credit = 0.008004 -> rounds to 0.01.
+    stored = {
+        "snapshot_date": today_iso,
+        "windows": {
+            "0": {"snapshot_start": 0.0, "snapshot_end": 1.334},
+            "1": {"snapshot_start": 0.0, "snapshot_end": 1.334},
+        },
+    }
+
+    with patch(
+        "custom_components.energy_window_tracker_beta.sensor.Store.async_load",
+        new_callable=AsyncMock,
+        return_value=stored,
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        await hass.async_block_till_done()
+
+    entry_data = hass.data[DOMAIN][entry.entry_id]
+    for wd in entry_data.values():
+        with patch.object(wd, "_now", return_value=noon_today):
+            wd._notify_update()
+    await hass.async_block_till_done()
+
+    entities = _get_tracker_sensors(hass, entry.entry_id)
+    assert len(entities) == 1
+    state = hass.states.get(entities[0].entity_id)
+    assert state is not None
+    assert state.attributes.get("export_credit") == 0.008
+    assert state.attributes.get("export_rate_per_kwh") == 0.003
+
+
 def test_parse_windows_unhappy_invalid_time_uses_fallback_and_warning() -> None:
     """[Unhappy] Invalid times in windows are handled safely."""
     windows, warnings = _parse_windows(
