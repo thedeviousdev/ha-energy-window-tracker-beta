@@ -1,9 +1,9 @@
-# Energy Window Tracker (Beta)
-
 [![Tests](https://img.shields.io/github/actions/workflow/status/thedeviousdev/ha-energy-window-tracker-beta/pytest.yml?label=tests&logo=githubactions)](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/actions/workflows/pytest.yml)
 [![Ruff](https://img.shields.io/github/actions/workflow/status/thedeviousdev/ha-energy-window-tracker-beta/ruff.yml?label=ruff&logo=ruff)](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/actions/workflows/ruff.yml)
 [![Release](https://img.shields.io/github/v/release/thedeviousdev/ha-energy-window-tracker-beta?label=release)](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/releases)
 [![HACS](https://img.shields.io/badge/HACS-Custom%20Integration-41BDF5?logo=homeassistantcommunitystore&logoColor=white)](https://hacs.xyz/)
+
+# Energy Window Tracker (Beta)
 
 Energy Window Tracker (Beta) helps you track energy usage inside time windows you define. It reads a cumulative sensor, takes snapshots, and reports usage during and after each configured window.
 
@@ -37,7 +37,7 @@ You will then see a confirmation screen that lets you jump back into editing.
 ## Managing Configuration
 
 Open the integration and choose **Configure** to edit windows or update source entities.  
-When editing a window, remove a time range by **clearing** that row’s start and/or end time (empty fields drop the range). From **Configure** (Options), if you clear every range and save, you are prompted to confirm deleting the window.  
+When editing a window, remove a time range by **clearing** its start time and end time.  
 Saving changes shows a success confirmation and returns you to the configure menu.
 
 ## Energy source: today vs totals
