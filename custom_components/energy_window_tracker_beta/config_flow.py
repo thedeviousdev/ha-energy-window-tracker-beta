@@ -1253,10 +1253,6 @@ class EnergyWindowConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         """Show the Configure window menu (config flow)."""
         _MAIN_LOGGER.debug("config flow: showing menu step_id=configure_menu")
         menu_title = _configure_title(None)
-        if self._setup_windows:
-            first_name = str(self._setup_windows[0].get(CONF_WINDOW_NAME) or "").strip()
-            if first_name:
-                menu_title = _configure_title(first_name)
         preamble = await _async_get_category_translation_suffix(
             self.hass, "config", "step.configure_menu.description"
         )
@@ -2040,8 +2036,8 @@ def _entry_using_source_entity(
 def _build_init_menu_options() -> dict[str, str]:
     """Build main menu as step_id -> label (dict so labels show without translation lookup)."""
     return {
-        "list_windows": "Edit ✏️",
-        "source_entity": "Update energy source(s) ⚡️",
+        "list_windows": "**✏️ Edit**",
+        "source_entity": "**⚡️ Update energy source(s)**",
     }
 
 
@@ -2363,7 +2359,7 @@ class EnergyWindowOptionsFlow(config_entries.OptionsFlow):
                 merged_sources = [new_source]
             else:
                 merged_sources.append(new_source)
-        # Merge with existing options so we don't drop other keys (e.g. _retain_entity_unique_ids)
+        # Merge with existing options so we don't drop unrelated keys.
         new_options = {
             **(self._config_entry.options or {}),
             CONF_WINDOWS: _sources_to_windows(merged_sources),

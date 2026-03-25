@@ -148,6 +148,7 @@
         "description": "Window successfully created."
       },
       "configure_menu": {
+        "title": "Configure window",
         "description": "Pick an option below. You can edit the window name, time ranges, import/export rates, or energy sensors."
       }
     },
@@ -252,7 +253,7 @@
       },
       "edit_window": {
         "title": "Edit window",
-        "description": "To remove a time range, clear its start time, end time, or both. If you clear every range and save, you will be asked to confirm deleting this window.",
+        "description": "To remove a time range, clear its start time and end time.",
         "data": {
           "window_name": "Window name",
           "import_rate_per_kwh": "Import ($) / kWh",
