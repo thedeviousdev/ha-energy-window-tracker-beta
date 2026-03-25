@@ -1001,7 +1001,8 @@ class WindowEnergySensor(RestoreSensor):
                     pass
             if r.import_rate_per_kwh > 0 and value is not None:
                 try:
-                    total_import_cost += round(float(value) * r.import_rate_per_kwh, 2)
+                    # Avoid rounding per-range; sum first then round once for the attribute.
+                    total_import_cost += float(value) * r.import_rate_per_kwh
                 except (TypeError, ValueError) as e:
                     _MAIN_LOGGER.debug(
                         "sensor: _update_value - import cost calc failed window=%r value=%r: %s",
@@ -1011,7 +1012,8 @@ class WindowEnergySensor(RestoreSensor):
                     )
             if r.export_rate_per_kwh > 0 and value is not None:
                 try:
-                    total_export_credit += round(float(value) * r.export_rate_per_kwh, 2)
+                    # Avoid rounding per-range; sum first then round once for the attribute.
+                    total_export_credit += float(value) * r.export_rate_per_kwh
                 except (TypeError, ValueError) as e:
                     _MAIN_LOGGER.debug(
                         "sensor: _update_value - export credit calc failed window=%r value=%r: %s",
@@ -1045,7 +1047,9 @@ class WindowEnergySensor(RestoreSensor):
         if cw := self._data._config_warnings_by_name.get(self._window_name):
             attrs["config_warnings"] = list(cw)
         if rates:
-            attrs[ATTR_IMPORT_COST] = round(total_import_cost, 2)
+            # Currency attributes can legitimately be < $0.01 for small energies;
+            # keep extra precision so the UI doesn't show 0.
+            attrs[ATTR_IMPORT_COST] = round(total_import_cost, 4)
             uniq_rates = sorted({round(float(x), 6) for x in rates})
             attrs["import_rate_per_kwh"] = (
                 uniq_rates[0] if len(uniq_rates) == 1 else uniq_rates
@@ -1057,7 +1061,7 @@ class WindowEnergySensor(RestoreSensor):
             attrs["export_rate_per_kwh"] = (
                 export_rates[0] if len(export_rates) == 1 else export_rates
             )
-            attrs[ATTR_EXPORT_CREDIT] = round(total_export_credit, 2)
+            attrs[ATTR_EXPORT_CREDIT] = round(total_export_credit, 4)
         self._attr_extra_state_attributes = attrs
         self._last_source_value = self._data.get_source_value()
         self._last_status = combined_status
