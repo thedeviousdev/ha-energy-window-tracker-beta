@@ -1,5 +1,12 @@
 # Changelog
 
+## [2.3.61](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.60...v2.3.61) (2026-03-25)
+
+
+### Features
+
+* stable source_slot_id, UUID unique_ids, one-time registry migration ([#49](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/issues/49)) ([538a688](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/commit/538a688c6aea71982b6e998fc05b47fa08ec1cda))
+
 ## [2.3.60](https://github.com/thedeviousdev/ha-energy-window-tracker-beta/compare/v2.3.59...v2.3.60) (2026-03-24)
 
 
